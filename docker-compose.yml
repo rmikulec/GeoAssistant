@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.4-alpine
+    container_name: postgis
+    environment:
+      POSTGRES_USER: gisuser
+      POSTGRES_DB: parcelsdb
+      POSTGRES_HOST_AUTH_METHOD: trust     # allows connections without a password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gisuser", "-d", "parcelsdb"]
+      interval: 5s
+      retries: 5
+
+  tileserv:
+    image: pramsey/pg_tileserv:latest
+    container_name: pg_tileserv
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://gisuser@db:5432/parcelsdb
+    ports:
+      - "7800:7800"
+    command:
+      ./pg_tileserv --config /opt/pg_tileserv/pg_tileserv.toml
+  
+  featureserv:
+    image: pramsey/pg_featureserv:latest
+    container_name: pg_featureserv
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://gisuser@db:5432/parcelsdb
+    ports:
+      - "9000:9000"
+
+volumes:
+  pgdata:
