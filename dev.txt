@@ -47,6 +47,8 @@ decorator==5.2.1
     # via ipython
 executing==2.2.0
     # via stack-data
+faiss-cpu==1.11.0
+    # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 flake8==7.2.0
     # via -r dev.in
 flask==3.0.3
@@ -123,6 +125,7 @@ numpy==2.3.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   contourpy
+    #   faiss-cpu
     #   geopandas
     #   matplotlib
     #   pandas
@@ -132,6 +135,7 @@ packaging==25.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   black
+    #   faiss-cpu
     #   geopandas
     #   ipykernel
     #   matplotlib
@@ -167,6 +171,8 @@ ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
     # via stack-data
+pyarrow==20.0.0
+    # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 pycodestyle==2.13.0
     # via flake8
 pyflakes==3.3.2
@@ -183,6 +189,8 @@ pyparsing==3.2.3
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   matplotlib
+pypdf2==3.0.1
+    # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 pyproj==3.7.1
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt

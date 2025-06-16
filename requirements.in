@@ -5,3 +5,5 @@ plotly
 dash
 shapely
 pyarrow
+faiss-cpu
+PyPdf2
