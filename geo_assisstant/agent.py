@@ -60,8 +60,13 @@ class GeoAgent:
             "description": "Return parcels matching the given field filters",
             "parameters": {
                 "type": "object",
-                "properties": {},
-                "required":[]
+                "properties": {
+                    "reset": {
+                        "type": "boolean",
+                        "description": "If true, will filter on the original set of parcels. If false, will apply a new filter to what was previously filtered",
+                    }
+                },
+                "required":["reset"]
             }
         }
 
@@ -76,21 +81,23 @@ class GeoAgent:
         return func_def
     
 
-    def _filter_gdf(self, **filters) -> None:
+    def _filter_gdf(self, reset: bool = True, **filters) -> None:
         """
         Private method to be called by the LLM, in order to update the 'filtered_gdf"
         """
+        gdf = self._gdf if reset else self.filtered_gdf
+
         # start with all‐True mask
-        mask = pd.Series(True, index=self._gdf.index)
+        mask = pd.Series(True, index=gdf.index)
 
         # apply each filter
         for col, val in filters.items():
             if val == 'ignore':
                 pass
             else:
-                mask &= (self._gdf[col] == val)
+                mask &= (gdf[col] == val)
 
-        self.filtered_gdf = self._gdf[mask]
+        self.filtered_gdf = gdf[mask]
     
 
     def chat(self, user_message: str, field_defs: list[dict]) -> str:
@@ -126,6 +133,7 @@ class GeoAgent:
             made_tool_calls = True
             args = json.loads(tool_call.arguments)
 
+            print(f"Calling with filters: {args}")
             self._filter_gdf(**args)
             self.messages.append({
                 "type": "function_call_output",
@@ -137,8 +145,9 @@ class GeoAgent:
             res = self.client.responses.create(
                 model=self.model,
                 input=self.messages,
-                tools=[self._build_func_def(field_defs)]
             )
         
         
-        return res.output[0].content[0].text
+        ai_message = res.output[0].content[0].text
+        self.messages.append({'role': 'assistant', 'content': ai_message})
+        return ai_message

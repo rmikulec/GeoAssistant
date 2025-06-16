@@ -12,28 +12,54 @@ from typing import Literal, Union, Self
 PDF_PARSE_SYSTEM_MESSAGE = """
 You are an AI assistant specialized in extracting structured information from a data dictionary PDF. You will be given the complete, page-by-page text of a data dictionary (tables and entries may be split across pages). Your job is to:
 
-1. Consolidate any multi-page or fragmented entries.
-2. Extract all field definitions into FieldDefinition objects, capturing:
-   - name
-   - name_pretty
-   - description (preserve markdown where appropriate)
-   - source
-   - format (one of 'str', 'int', or 'float')
-3. Extract all abbreviations into Abbreviation objects.
-4. Extract all code lookups into CodeLookup objects, each containing a list of Code items (code + description).
+1. Consolidate any multi-page or fragmented entries into a single coherent entry.  
+2. Extract only the data exactly as presented in the text; do not infer, alter, summarize, or add any information.  
+3. For each field definition, produce a `FieldDefinition` object capturing:
+   - `name`: the exact field identifier from the “Field Name:” line, with no added or removed characters.  
+   - `name_pretty`: the human-readable name exactly as shown.  
+   - `description`: the full “Description:” text, preserving line breaks and markdown formatting if present.  
+   - `source`: the exact “Data Source:” line(s).  
+   - `format`: the exact type from the “Format:” line, mapped to one of `'str'`, `'int'`, or `'float'`.  
+4. Extract every abbreviation into an `Abbreviation` object, using the exact abbreviation and its corresponding description.  
+5. Extract each code lookup into a `CodeLookup` object, including all `Code` items with their exact code and description pairs.
 
-Produce exactly one JSON object matching the `DataDictionary` Pydantic schema (with keys `field_definitions`, `abbreviations`, and `codes`) and nothing else. Do not include any explanatory text or metadata—only the JSON output. 
+Produce exactly one JSON object conforming to the `DataDictionary` Pydantic schema, with keys `"field_definitions"`, `"abbreviations"`, and `"codes"`. Output only this JSON—no additional text, commentary, or metadata.```
 """
 
 """
 Class definitions to define Pydantic models for Data Dictionary Parsing
 """
 class FieldDefinition(BaseModel):
-    name: str = Field(description="The direct name of the field")
-    name_pretty: str = Field(description="A well formatted name of the field")
-    description: str = Field(description="The entire description for the field. Format as markdown if needed")
-    source: str = Field(description="description of where the data comes from")
-    format: Literal['str', 'int', 'float'] = Field(description="The python primitive type of the field")
+    name: str = Field(
+        description=(
+            "Machine-friendly field identifier extracted from the PDF's 'Field Name' section "
+            "(no spaces, use snake_case or camelCase)."
+        )
+    )
+    name_pretty: str = Field(
+        description=(
+            "Human-friendly field label taken from the PDF's 'Field Name' section, "
+            "suitable for UI display."
+        )
+    )
+    description: str = Field(
+        description=(
+            "Detailed explanation from the PDF's 'Description' section. "
+            "Supports Markdown formatting."
+        )
+    )
+    source: str = Field(
+        description=(
+            "Origin of the data as listed in the PDF's 'Data Source' section, "
+            "e.g., department or system reference."
+        )
+    )
+    format: Literal['number', 'boolean', 'string'] = Field(
+        description=(
+            "Normalized JSON data type based on the PDF's 'Format' section: 'string' for text, "
+            "'number' for integers or floats, and 'boolean' for true/false values."
+        )
+    )
 
 
 class Abbreviation(BaseModel):
