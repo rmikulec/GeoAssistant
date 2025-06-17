@@ -54,7 +54,7 @@ def test_properties_property(mock_tileserv, table_fixture):
 def test_add_and_remove_map_layer(mock_tileserv):
     handler = MapHandler(table_id="public.parcels", table_name="parcels")
     f1 = GeoFilter(field="id", value="1", op="equal")
-    handler._add_map_layer("layer1", color="red", filters=[f1], type_="fill")
+    handler._add_map_layer("layer1", color="red", filters=[f1], style="fill")
 
     # map_layers and _layer_filters should be populated
     assert "layer1" in handler.map_layers
