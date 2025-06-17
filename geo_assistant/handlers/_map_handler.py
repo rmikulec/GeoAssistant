@@ -1,21 +1,21 @@
 import requests
 from functools import cached_property
 
+from plotly.graph_objects import Figure
 import plotly.express as px
 
-
 from geo_assistant.handlers._filter import GeoFilter
-
+from geo_assistant.handlers._exceptions import InvalidTileservTableID
+from geo_assistant.config import Configuration
 
 class MapHandler:
     """
     A class used in order to change the state of a plotly Map object
 
     Methods:
-        - add_table
-        - remove_table
-        - reset_tables
-        - get_current_state
+        - add_map_layer: Adds a layer to the plotly map figure
+        - remove_map_layer: Removed a layer given a layer_id
+        - reset_map: Clears all layers and resets map position
     """
 
     @cached_property
@@ -24,12 +24,12 @@ class MapHandler:
         Private property to get the index data from the pg-tileserv server
         """
         return requests.get(
-            "http://localhost:7800/index.json"
+            f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
 
     def __init__(self, table_id: str, table_name: str):
         if table_id not in self._tileserv_index:
-            raise Exception(f"table with ID {table_id} not found in pg-tileserv index. Please check http://localhost:7800/index.json")
+            raise InvalidTileservTableID(table_id)
         else:
             self.table_id = table_id
             self.table_name = table_name
@@ -55,7 +55,7 @@ class MapHandler:
         The direct json data for the table from pg-tileserv
         """
         return requests.get(
-            f"http://localhost:7800/{self.table_id}.json"
+            f"{Configuration.pg_tileserv_url}/{self.table_id}.json"
         ).json()
     
     @property
@@ -120,7 +120,15 @@ class MapHandler:
         self._layer_filters = {}
         return "All layers removed from map, blank map initialized"
 
-    def update_figure(self):
+    def update_figure(self) ->Figure:
+        """
+        Updates the figure depending on what layers have been added / removed since last update
+
+        If there are no more layers (a reset or all removed), then it will reset the entire figure
+
+        Returns:
+            Figure: The MapHandler's map plotly figure, configured with all the correct layers
+        """
         layers = list(self.map_layers.values())
         if layers:
             self.figure.update_layout(

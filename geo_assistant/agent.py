@@ -8,6 +8,7 @@ from typing import Callable, Any
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
 from geo_assistant import tools
+from geo_assistant.config import Configuration
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class GeoAgent:
         self, 
         map_handler: MapHandler,
         data_handler: DataHandler,
-        model: str = "gpt-4o",
+        model: str = Configuration.inference_model,
         supplement_info: str = None
     ):
         self.model = model
@@ -160,7 +161,6 @@ class GeoAgent:
                 model=self.model,
                 input=self.messages,
             )
-        
         
         ai_message = res.output_text
         self.messages.append({'role': 'assistant', 'content': ai_message})

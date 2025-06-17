@@ -4,3 +4,5 @@ black
 flake8
 isort
 IPykernel
+pytest
+responses
