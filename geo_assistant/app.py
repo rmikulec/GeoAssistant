@@ -151,7 +151,10 @@ def send_message(n_clicks, new_message, existing_log):
     
     # wrap each message in a div (you can customize the className/style)
     log.append(html.Div(f"User: {new_message}", className="mb-2"))
-    field_defs = index.query(new_message)
+    field_def_query = new_message
+    if len(agent.messages)>1:
+        field_def_query += " " + agent.messages[-1]['content']
+    field_defs = index.query(new_message, k=10)
     ai_response = agent.chat(new_message, field_defs)
     log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
     

@@ -89,13 +89,11 @@ class GeoAgent:
                         },
                         "operator": {
                             "type": "string",
-                            "enum": ["equal", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual", "notEqual", "IGNORE"],
-                            "default": "IGNORE"
+                            "enum": ["equal", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual", "notEqual"],
                         }
                     },
                     "required": ["value", "operator"]
             }
-            func_def['parameters']['required'].append(res['name'])
 
         return func_def
     
@@ -180,7 +178,6 @@ class GeoAgent:
                             op=filter_details['operator']
                         )
                         for filter_name, filter_details in args.items()
-                        if filter_details['operator'] != "IGNORE"
                     ]    
                     self.map_handler._add_map_layer(
                         layer_id=layer_id,

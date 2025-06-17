@@ -92,7 +92,7 @@ class MapHandler:
 
 
     def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], type_: str="line"):
-        filter_ = "&".join([map_filter._to_cql() for map_filter in filters])
+        filter_ = " AND ".join([map_filter._to_cql() for map_filter in filters])
         # Create the layer
         layer = {
             "sourcetype": "vector",
@@ -120,8 +120,16 @@ class MapHandler:
         self._layer_filters = {}
 
     def update_figure(self):
-        self.figure.update_layout(
-            map_style="dark",
-            map_layers=list(self.map_layers.values())
-        )
+        layers = list(self.map_layers.values())
+        if layers:
+            self.figure.update_layout(
+                map_style="dark",
+                map_layers=layers
+            )
+        else:
+            self.figure = px.choropleth_map(zoom=3)
+            self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+            self.figure.update_layout(map_bounds=self._default_bounds)
+            self.figure.update_layout(map_style="dark")
+
         return self.figure
