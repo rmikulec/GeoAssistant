@@ -8,6 +8,8 @@ from PyPDF2 import PdfReader
 from pydantic import BaseModel, Field
 from typing import Literal, Union, Self
 
+from geo_assistant.config import Configuration
+
 
 FIELD_DEF_PARSE = """
 You are an AI assistant specialized in extracting structured information from a data dictionary PDF. You will be given the complete, page-by-page text of a data dictionary (tables and entries may be split across pages). Your job is to:
@@ -90,7 +92,7 @@ class DataDictionaryStore:
         - query: Queries the vector store for top k results
     """
 
-    _client = openai.OpenAI(api_key=pathlib.Path("./openai.key").read_text())
+    _client = openai.OpenAI(api_key=Configuration.openai_key)
 
     def __init__(self, index: faiss.IndexFlatL2, document_store: dict, supplement_info: str):
         self.index = index
@@ -195,13 +197,22 @@ class DataDictionaryStore:
 
 
     @classmethod
-    def from_pdf(cls, pdf_path: Union[str, pathlib.Path], export_path: Union[str, pathlib.Path], appendix_start_page: int) -> Self:
+    def from_pdf(
+        cls, 
+        pdf_path: Union[str, pathlib.Path], 
+        export_path: Union[str, pathlib.Path], 
+        appendix_start_page: int,
+        model: str = Configuration.parsing_model
+    ) -> Self:
         """
         Create a new Field Definition Index Store from a given data dictionary pdf
 
         Args:
             - pdf_path(Union[pathlib.Path, str]): The path to the data dictionary pdf
             - export_path(Union[pathlib.Path, str]): Where to export the store to
+            - appendix_start_page(int): If there is an appendix, the page where it begins
+                This may change, but for now adding this greatly simplifies code
+            - model(str): The OpenAI model to use for parsing the data
         Returns:
             FieldDefinitionStore: A newly built vector store of the field definitions parsed from
                 the given pdf
@@ -224,7 +235,7 @@ class DataDictionaryStore:
 
         # Parse field definitions
         res = cls._client.responses.parse(
-            model="o4-mini",
+            model=model,
             input=[
                 {'role': 'system', 'content': FIELD_DEF_PARSE},
                 {'role': 'user', 'content': field_def_text}
@@ -241,7 +252,7 @@ class DataDictionaryStore:
         res = cls._client.responses.create(
             instructions=SUPPLEMENT_INFO_PARSE,
             input=appendix_text,
-            model="o4-mini",
+            model=model,
         )
 
         instance = cls(index, document_store, res.output_text)

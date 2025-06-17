@@ -2,14 +2,16 @@ import geopandas as gpd
 from sqlalchemy import create_engine, text
 
 from geo_assistant.handlers._filter import GeoFilter
+from geo_assistant.config import Configuration
+
 
 class DataHandler:
     """
     A small handler class to interact directly with the PostGIS Database
     """
     
-    def __init__(self, db_name: str, table_name: str):
-        self.engine = create_engine(f"postgresql+psycopg2://gisuser:pw@localhost:5432/{db_name}")
+    def __init__(self, table_name: str):
+        self.engine = create_engine(Configuration.db_connection_url)
         self.table_name = table_name
     
     def get_geojson(self, lat: float, long: float) -> gpd.GeoDataFrame:

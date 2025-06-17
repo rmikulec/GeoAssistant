@@ -6,7 +6,7 @@ import plotly.express as px
 
 from geo_assistant.handlers._filter import GeoFilter
 from geo_assistant.handlers._exceptions import InvalidTileservTableID
-
+from geo_assistant.config import Configuration
 
 class MapHandler:
     """
@@ -24,7 +24,7 @@ class MapHandler:
         Private property to get the index data from the pg-tileserv server
         """
         return requests.get(
-            "http://localhost:7800/index.json"
+            f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
 
     def __init__(self, table_id: str, table_name: str):
@@ -55,7 +55,7 @@ class MapHandler:
         The direct json data for the table from pg-tileserv
         """
         return requests.get(
-            f"http://localhost:7800/{self.table_id}.json"
+            f"{Configuration.pg_tileserv_url}/{self.table_id}.json"
         ).json()
     
     @property
