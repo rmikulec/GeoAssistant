@@ -43,6 +43,8 @@ fonttools==4.58.4
     # via matplotlib
 geopandas==1.1.0
     # via -r requirements.in
+gunicorn==23.0.0
+    # via -r requirements.in
 h11==0.16.0
     # via httpcore
 httpcore==1.0.9
@@ -89,6 +91,7 @@ packaging==25.0
     # via
     #   faiss-cpu
     #   geopandas
+    #   gunicorn
     #   matplotlib
     #   plotly
     #   pyogrio

@@ -80,6 +80,8 @@ fonttools==4.58.4
     #   matplotlib
 geopandas==1.1.0
     # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+gunicorn==23.0.0
+    # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 h11==0.16.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -176,6 +178,7 @@ packaging==25.0
     #   black
     #   faiss-cpu
     #   geopandas
+    #   gunicorn
     #   ipykernel
     #   matplotlib
     #   plotly

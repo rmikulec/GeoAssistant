@@ -42,6 +42,7 @@ fig.update_layout(map_bounds={
 })
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
+server = app.server
 app.layout = html.Div([
     # full-screen graph
     dcc.Graph(
@@ -129,4 +130,4 @@ def toggle_chat(n, is_open):
     return is_open
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=8050)

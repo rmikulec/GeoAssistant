@@ -9,3 +9,4 @@ pyarrow
 faiss-cpu
 openai
 PyPdf2
+gunicorn

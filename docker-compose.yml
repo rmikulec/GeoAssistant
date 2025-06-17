@@ -14,6 +14,9 @@ services:
       test: ["CMD", "pg_isready", "-U", "gisuser", "-d", "parcelsdb"]
       interval: 5s
       retries: 5
+    profiles:
+      - dev
+      - prod
 
   tileserv:
     image: pramsey/pg_tileserv:latest
@@ -27,6 +30,9 @@ services:
       - "7800:7800"
     command:
       ./pg_tileserv --config /opt/pg_tileserv/pg_tileserv.toml
+    profiles:
+      - dev
+      - prod
   
   geo_assistant:
     image: python:3.13-slim
@@ -48,8 +54,9 @@ services:
       - "8050:8050"
     command: >
       sh -c "pip install --no-cache-dir -r requirements.txt &&
-             python3 -m geo_assistant.app"
-    restart: on-failure
+            gunicorn geo_assistant.app:server --bind 0.0.0.0:8050 --workers 2"
+    profiles:
+      - prod
 
 volumes:
   pgdata:
