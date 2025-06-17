@@ -15,7 +15,7 @@ You are an AI assistant specialized in extracting structured information from a 
 1. Consolidate any multi-page or fragmented entries into a single coherent entry.  
 2. Extract only the data exactly as presented in the text; do not infer, alter, summarize, or add any information.  
 3. For each field definition, produce a `FieldDefinition` object capturing:
-   - `name`: The formatted name of the field. Usually one of these formats (myField, MyField, my_field)
+   - `name`: The formatted name of the field. Usually one of these formats (MyField, myField, my_field)
    - `name_pretty`: The raw, display-friendly name of the field
    - `description`: the full “Description:” text, preserving line breaks and markdown formatting if present.  
    - `source`: the exact “Data Source:” line(s).  
@@ -30,7 +30,9 @@ supplemental data from a dictionary. This data is important for understanding th
 not explicitly detailing all of the fields present. This could include any Abbreviations, Code lookups, relvant information, etc.
 
 Please return the response as well formatted markdown, using sections, lists, and tables when needed
-Please be detailed and include all information in any appendencies
+Please be detailed and include all appendencies
+Please include exact information from all appendencies
+Include all tables in all appendencies
 """
 
 """
@@ -39,8 +41,8 @@ Class definitions to define Pydantic models for Data Dictionary Parsing
 class FieldDefinition(BaseModel):
     name: str = Field(
         description=(
-            "Machine-friendly field identifier extracted from the PDF's 'Field Name' section "
-            "(no spaces, use snake_case or camelCase or ClassCase)."
+            "Machine-friendly field identifier"
+            "(will be in ClassCase, snake_case or camelCase)."
         )
     )
     name_pretty: str = Field(
