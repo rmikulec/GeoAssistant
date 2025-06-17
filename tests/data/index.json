@@ -1,0 +1,18 @@
+{
+    "public.parcels": {
+      "type": "table",
+      "id": "public.parcels",
+      "name": "parcels",
+      "schema": "public",
+      "description": "",
+      "detailurl": "http://localhost:7800/public.parcels.json"
+    },
+    "tiger.tabblock20": {
+      "type": "table",
+      "id": "tiger.tabblock20",
+      "name": "tabblock20",
+      "schema": "tiger",
+      "description": "",
+      "detailurl": "http://localhost:7800/tiger.tabblock20.json"
+    }
+  }

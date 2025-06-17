@@ -35,7 +35,7 @@ class DataHandler:
         FROM {self.table_name}
         WHERE"""
 
-        sql += "\n AND".join([map_filter._to_sql() for map_filter in filters])
+        sql += "\n AND ".join([map_filter._to_sql() for map_filter in filters])
 
         with self.engine.connect() as conn:
             count = conn.execute(text(sql)).scalar()

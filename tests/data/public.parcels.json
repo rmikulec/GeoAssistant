@@ -1,0 +1,491 @@
+{
+  "id": "public.parcels",
+  "schema": "public",
+  "name": "parcels",
+  "properties": [
+    {
+      "name": "Borough",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Block",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "Lot",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "CD",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "BCT2020",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "BCTCB2020",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "CT2010",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "CB2010",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SchoolDist",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Council",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "ZipCode",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "FireComp",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "PolicePrct",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "HealthCent",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "HealthArea",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "Sanitboro",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SanitDistr",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SanitSub",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Address",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ZoneDist1",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ZoneDist2",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ZoneDist3",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ZoneDist4",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Overlay1",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Overlay2",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SPDist1",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SPDist2",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SPDist3",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "LtdHeight",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "SplitZone",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "BldgClass",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "LandUse",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Easements",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "OwnerType",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "OwnerName",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "LotArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "BldgArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "ComArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "ResArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "OfficeArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "RetailArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "GarageArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "StrgeArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "FactryArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "OtherArea",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "AreaSource",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "NumBldgs",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "NumFloors",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "UnitsRes",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "UnitsTotal",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "LotFront",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "LotDepth",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "BldgFront",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "BldgDepth",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "Ext",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ProxCode",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "IrrLotCode",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "LotType",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "BsmtCode",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "AssessLand",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "AssessTot",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "ExemptTot",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "YearBuilt",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "YearAlter1",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "YearAlter2",
+      "type": "int4",
+      "description": ""
+    },
+    {
+      "name": "HistDist",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Landmark",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "BuiltFAR",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "ResidFAR",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "CommFAR",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "FacilFAR",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "BoroCode",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "BBL",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "CondoNo",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "Tract2010",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "XCoord",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "YCoord",
+      "type": "int8",
+      "description": ""
+    },
+    {
+      "name": "ZoneMap",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "ZMCode",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Sanborn",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "TaxMap",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "EDesigNum",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "APPBBL",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "APPDate",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "PLUTOMapID",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "FIRM07_FLA",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "PFIRM15_FL",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Version",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "DCPEdited",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Latitude",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "Longitude",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "Notes",
+      "type": "text",
+      "description": ""
+    },
+    {
+      "name": "Shape_Leng",
+      "type": "float8",
+      "description": ""
+    },
+    {
+      "name": "Shape_Area",
+      "type": "float8",
+      "description": ""
+    }
+  ],
+  "geometrytype": "Geometry",
+  "center": [
+    -73.97819502510345,
+    40.705404057032325
+  ],
+  "bounds": [
+    -74.2562146223856,
+    40.49449291374346,
+    -73.70017542782129,
+    40.91631520032119
+  ],
+  "minzoom": 0,
+  "maxzoom": 22,
+  "tileurl": "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf"
+}
