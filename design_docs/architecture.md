@@ -71,6 +71,7 @@ sequenceDiagram
   DashApp->>DataDictionaryStore: Queries with User Message
   DataDictionaryStore->>GeoAgent: Relevant Field Definitions to Create Tools
   GeoAgent->>OpenAI: Queries with Tools and User Message
+  OpenAI->>GeoAgent: Response with Potential Tool Calls
   loop Every OpenAI Tool Call:
     GeoAgent->>MapHandler: Updates Map based on Tool Call
     GeoAgent->>DataHandler: Queries for Relevant Information
