@@ -1,0 +1,24 @@
+# Database connection
+DbConnection = "user=gisuser host=localhost dbname=parcelsdb"
+# Close pooled connections after this interval
+DbPoolMaxConnLifeTime = "1h"
+# Hold no more than this number of connections in the database pool
+DbPoolMaxConns = 20
+# Accept connections on this subnet (default accepts on all subnets)
+HttpHost = "0.0.0.0"
+# Accept connections on this port
+HttpPort = 7800
+# Resolution to quantize vector tiles to
+DefaultResolution = 2048
+# Rendering buffer to add to vector tiles
+DefaultBuffer = 1024
+# Limit number of features requested (-1 = no limit)
+MaxFeaturesPerTile = 200000
+# Advertise this minimum zoom level
+DefaultMinZoom = 0
+# Advertise this maximum zoom level
+DefaultMaxZoom = 22
+# Allow any page to consume these tiles
+CORSOrigins = *
+# Output extra logging information?
+Debug = false
