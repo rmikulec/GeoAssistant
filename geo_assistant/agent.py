@@ -4,8 +4,6 @@ import pathlib
 import openai
 import json
 
-from geo_assisstant.vector_store import FieldDefinitionStore
-
 
 GEO_AGENT_SYSTEM_MESSAGE = """
 You are a geo-assistant designed to help users explore geospatial parcel data via natural-language conversation.
@@ -47,7 +45,7 @@ class GeoAgent:
         ]
 
         self._gdf = gdf
-        self.filtered_gdf: gpd.GeoDataFrame = gdf.copy()
+        self.filtered_gdf: gpd.GeoDataFrame = gdf.copy()[["geometry", "Borough", "BBL"]]
     
     def _build_func_def(self, field_defs: list[dict]):
         """
