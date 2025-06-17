@@ -3,7 +3,9 @@ geopandas
 matplotlib
 plotly
 dash
+dash-bootstrap-components
 shapely
 pyarrow
 faiss-cpu
+openai
 PyPdf2
