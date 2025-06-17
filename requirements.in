@@ -2,6 +2,7 @@ dash
 dash-bootstrap-components
 faiss-cpu
 geopandas
+geoalchemy2
 gunicorn
 matplotlib
 openai
@@ -12,3 +13,4 @@ pyarrow
 pydantic
 pydantic_settings
 shapely
+sqlalchemy
