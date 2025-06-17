@@ -1,12 +1,16 @@
-import geopandas as gpd
-import pandas as pd
+import logging
 import pathlib
 import openai
 import json
 
+from typing import Callable, Any
+
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
+from geo_assistant import tools
 
+
+logger = logging.getLogger(__name__)
 
 GEO_AGENT_SYSTEM_MESSAGE = """
 You are a geo-assistant who is an expert at making maps in GIS software. You will be given access
@@ -17,6 +21,12 @@ To do so, you will be given access to the following tools:
   - add_map_layer: You can add a new layer to the map, with the filters and color of your choosing
   - remove_map_layer: You can remove a layer when it is no longer applicable to the conversation
   - reset_map: You can reset the map to have 0 layers and start over
+
+Here is the current status of the map:
+{map_status}
+
+Here is any other relevant information:
+{supplement_information}
 """
 
 
@@ -36,94 +46,34 @@ class GeoAgent:
         map_handler: MapHandler,
         data_handler: DataHandler,
         model: str = "gpt-4o",
+        supplement_info: str = None
     ):
         self.model = model
+        self.supplement_info = supplement_info
         self.map_handler = map_handler
         self.data_handler = data_handler
         self.client = openai.OpenAI(api_key=pathlib.Path("./openai.key").read_text())
 
         self.messages = [
-            {'role': 'system', 'content': GEO_AGENT_SYSTEM_MESSAGE}
+            {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
+                    map_status="Graph not updated yet.",
+                    supplement_information=supplement_info
+                )    
+            }
         ]
 
-
-    def _build_add_map_layer_func_def(self, field_defs: list[dict]):
-        """
-        Private method to build an OpenAI Function JSON schema, based on a given set of field
-            definitions
-        """
-        func_def = {
-            "type": "function",
-            "name": "add_map_layer",
-            "description": "Adds a new layer to the map",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "color": {
-                        "type": "string",
-                        "description": "Hex value of the color for this layer",
-                    },
-                    "layer_id": {
-                        "type": "string",
-                        "description": "A code friendly id for the layer"
-                    },
-                    "style": {
-                        "type": "string",
-                        "description": "The style of the layer, can be outlined ('line') for filled in ('fill')",
-                        "enum": ['line', 'fill'],
-                        "default": "line"
-                    }
-                },
-                "required":["color", "layer_id", "style"]
-            }
+        self.tools: dict[str, Callable[..., Any]] = {
+            "add_map_layer":    self.map_handler._add_map_layer,
+            "remove_map_layer": self.map_handler._remove_map_layer,
+            "reset_map":        self.map_handler._reset_map,
         }
 
-        for res in field_defs:
-            func_def['parameters']['properties'][res['name']] = {
-                "type": "object",
-                "description": res['description'],
-                "properties":
-                    {
-                        "value": {
-                            "type": res['format'],
-                        },
-                        "operator": {
-                            "type": "string",
-                            "enum": ["equal", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual", "notEqual"],
-                        }
-                    },
-                    "required": ["value", "operator"]
-            }
-
-        return func_def
-    
-    def _build_remove_map_layer_func_def(self):
-        func_def = {
-            "type": "function",
-            "name": "remove_map_layer",
-            "description": "Remove a layer from the map",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "layer_id": {
-                        "type": "string",
-                        "description": "The layer to remove from the map",
-                        "enum": list(self.map_handler._layer_filters.keys())
-                    }
-                },
-                "required":["layer_id"]
-            }
+    def _update_dev_message(self):
+        self.messages[0] = {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
+                map_status=json.dumps(self.map_handler.status,indent=2),
+                supplement_information=self.supplement_info
+            )    
         }
-        return func_def
-
-    def _build_reset_map_func_def(self):
-        func_def = {
-            "type": "function",
-            "name": "reset_map",
-            "description": "Adds a new layer to the map",
-        }
-
-        return func_def
     
 
     def chat(self, user_message: str, field_defs: list[dict]) -> str:
@@ -144,14 +94,16 @@ class GeoAgent:
             {'role': 'user', 'content': user_message}
         )
 
+        tool_defs = [
+            tools._build_add_layer_def(field_defs),
+            tools._build_remove_layer_def(self.map_handler),
+            tools._build_reset_def()
+        ]
+
         res = self.client.responses.create(
             model=self.model,
             input=self.messages,
-            tools=[
-                self._build_add_map_layer_func_def(field_defs=field_defs),
-                self._build_remove_map_layer_func_def(),
-                self._build_reset_map_func_def()
-            ]
+            tools=tool_defs
         )
 
         made_tool_calls = False
@@ -161,50 +113,48 @@ class GeoAgent:
                 continue
 
             made_tool_calls = True
-            args = json.loads(tool_call.arguments)
+            kwargs = json.loads(tool_call.arguments)
 
-            print(f"Calling {tool_call.name} with filters: {args}")
+            print(f"Calling {tool_call.name} with filters: {kwargs}")
 
-            match tool_call.name:
 
-                case "add_map_layer":   
-                    layer_id=args.pop('layer_id')
-                    color=args.pop('color')
-                    type_=args.pop('style')
-                    filters = [
-                        GeoFilter(
-                            field=filter_name,
-                            value=filter_details['value'],
-                            op=filter_details['operator']
-                        )
-                        for filter_name, filter_details in args.items()
-                    ]    
-                    self.map_handler._add_map_layer(
-                        layer_id=layer_id,
-                        color=color,
-                        type_=type_,
-                        filters=filters
-                    )
-                    self.messages.append({
-                        "type": "function_call_output",
-                        "call_id": tool_call.call_id,
-                        "output": f"{self.data_handler.filter_count(filters)} parcels found"
-                    })
-                case "remove_map_layer":
-                    layer_id = args.pop('layer_id')
-                    self.map_handler._remove_map_layer(layer_id)
-                    self.messages.append({
-                        "type": "function_call_output",
-                        "call_id": tool_call.call_id,
-                        "output": f"Layer {layer_id} removed from map."
-                    })
-                case "reset_map":
-                    self.map_handler._reset_map()
-                    self.messages.append({
-                        "type": "function_call_output",
-                        "call_id": tool_call.call_id,
-                        "output": f"All layers removed from the map."
-                    })
+            if tool_call.name == "add_map_layer":   
+                # Extract filters from the kwargs
+                filter_names = [
+                    name
+                    for name in kwargs.keys()
+                    if name not in ['layer_id', 'color', 'style']
+                ]
+                filters = []
+                for filter_name in filter_names:
+                    filter_details = kwargs.pop(filter_name)
+                    filters.append(GeoFilter(
+                        field=filter_name,
+                        value=filter_details['value'],
+                        op=filter_details['operator']
+                    ))
+            
+                # Run the function with the new filter arg injected
+                try:
+                    kwargs['filters'] = filters
+                    self.tools['add_map_layer'](**kwargs)
+                    # This tool has a custom response to handle how many parcels were selected
+                    tool_response = f"{self.data_handler.filter_count(filters)} parcels found"
+                except Exception as e:
+                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
+            else:
+                try:
+                    tool_response = self.tools[tool_call.name](**kwargs)
+                except Exception as e:
+                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
+            print(f"Tool Response: {tool_response}")
+            self._update_dev_message()
+            self.messages.append({
+                "type": "function_call_output",
+                "call_id": tool_call.call_id,
+                "output": tool_response
+            })
+    
         if made_tool_calls:
             res = self.client.responses.create(
                 model=self.model,
