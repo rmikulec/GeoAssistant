@@ -33,7 +33,7 @@ services:
     profiles:
       - dev
       - prod
-  
+
   geo_assistant:
     image: python:3.13-slim
     container_name: geo_assistant
