@@ -93,7 +93,7 @@ class GeoAgent:
                             "default": "IGNORE"
                         }
                     },
-                    "required": ["value"]
+                    "required": ["value", "operator"]
             }
             func_def['parameters']['required'].append(res['name'])
 
