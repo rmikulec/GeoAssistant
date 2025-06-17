@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgis/postgis:15-3.4-alpine
@@ -30,16 +28,28 @@ services:
     command:
       ./pg_tileserv --config /opt/pg_tileserv/pg_tileserv.toml
   
-  featureserv:
-    image: pramsey/pg_featureserv:latest
-    container_name: pg_featureserv
+  geo_assistant:
+    image: python:3.13-slim
+    container_name: geo_assistant
+    working_dir: /usr/src/app
+    volumes:
+      - ./:/usr/src/app
     depends_on:
       db:
         condition: service_healthy
+      tileserv:
+        condition: service_started
     environment:
+      # share the same DB URL
       DATABASE_URL: postgresql://gisuser@db:5432/parcelsdb
+      # any other env vars your app needs, e.g.:
+      # REDIS_URL: redis://redis:6379
     ports:
-      - "9000:9000"
+      - "8050:8050"
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+             python3 -m geo_assistant.app"
+    restart: on-failure
 
 volumes:
   pgdata:
