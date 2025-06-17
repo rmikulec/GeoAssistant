@@ -2,7 +2,6 @@
   <img src="banner.png" alt="GeoAssistant Banner" width="800"/>
 </p>
 
-# GeoAssistant
 
 GeoAssistant is an interactive, LLM-powered GIS data explorer that enables users to query, filter, and visualize geospatial parcel data through natural language. Leveraging the NYC PLUTO database, GeoAssistant demonstrates how vector-stores and AI-guided tools can simplify complex spatial queries and mapping workflows.
 
