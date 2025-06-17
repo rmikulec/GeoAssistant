@@ -104,6 +104,8 @@ importlib-metadata==8.7.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash
+iniconfig==2.1.0
+    # via pytest
 ipykernel==6.29.5
     # via -r dev.in
 ipython==9.3.0
@@ -183,6 +185,7 @@ packaging==25.0
     #   matplotlib
     #   plotly
     #   pyogrio
+    #   pytest
 pandas==2.3.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -205,6 +208,8 @@ plotly==6.1.2
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash
+pluggy==1.6.0
+    # via pytest
 prompt-toolkit==3.0.51
     # via ipython
 psutil==7.0.0
@@ -231,6 +236,7 @@ pygments==2.19.1
     # via
     #   ipython
     #   ipython-pygments-lexers
+    #   pytest
 pyogrio==0.11.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -245,6 +251,8 @@ pyproj==3.7.1
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   geopandas
+pytest==8.4.0
+    # via -r dev.in
 python-dateutil==2.9.0.post0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -255,6 +263,8 @@ pytz==2025.2
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   pandas
+pyyaml==6.0.2
+    # via responses
 pyzmq==27.0.0
     # via
     #   ipykernel
@@ -263,6 +273,9 @@ requests==2.32.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash
+    #   responses
+responses==0.25.7
+    # via -r dev.in
 retrying==1.3.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -319,6 +332,7 @@ urllib3==2.4.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   requests
+    #   responses
 wcwidth==0.2.13
     # via prompt-toolkit
 werkzeug==3.0.6
