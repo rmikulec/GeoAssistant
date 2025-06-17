@@ -32,8 +32,6 @@ def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
             "description": fd["description"]
         }
 
-    print(json.dumps(props, indent=2))
-
     return {
         "type": "function",
         "name":"add_map_layer",
