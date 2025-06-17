@@ -41,8 +41,8 @@ class MapHandler:
         self.figure.update_layout(map_bounds=self._default_bounds)
     
         # Key attributes for udpating the figure
-        self.map_layers = {}
-        self._layer_filters = {}
+        self.map_layers: dict = {}
+        self._layer_filters: dict[str, GeoFilter] = {}
 
         # Udpate the figure once while initializing
         self.figure.update_layout(
@@ -91,11 +91,8 @@ class MapHandler:
     
 
 
-    def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], type_: str="line"):
-        """
-        Private method to add a map layer given an id, color and a list of GeoFilters
-        """
-        filter_ = " AND ".join([map_filter._to_cql() for map_filter in filters])
+    def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+        filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters])
         # Create the layer
         layer = {
             "sourcetype": "vector",
@@ -103,8 +100,8 @@ class MapHandler:
             "source": [
                 self._base_tileurl + "&filter=" + filter_
             ],
-            "sourcelayer": self.table_id,                   # ← must match your tileset name :contentReference[oaicite:0]{index=0}
-            "type": type_,                                 # draw lines
+            "sourcelayer": self.table_id,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+            "type": style,                                 # draw lines
             "color": color,
             "below": "traces" 
         }
@@ -113,20 +110,15 @@ class MapHandler:
         self._layer_filters[layer_id] = filters
     
 
-    def _remove_map_layer(self, layer_id: str):
-        """
-        Private method to remove a map layer given an id
-        """
+    def _remove_map_layer(self, layer_id: str) -> str:
         del self.map_layers[layer_id]
         del self._layer_filters[layer_id]
+        return f"Layer {layer_id} removed from the map"
 
-
-    def _reset_map(self):
-        """
-        Resets the map
-        """
+    def _reset_map(self) -> str:
         self.map_layers = {}
         self._layer_filters = {}
+        return "All layers removed from map, blank map initialized"
 
     def update_figure(self) ->Figure:
         """
@@ -148,4 +140,24 @@ class MapHandler:
             self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
             self.figure.update_layout(map_bounds=self._default_bounds)
             self.figure.update_layout(map_style="dark")
+
         return self.figure
+    
+
+    @property
+    def status(self):
+        layers = []
+
+        for layer_id, layer in self.map_layers.items():
+            filters = self._layer_filters[layer_id]
+            layers.append(
+                {
+                    "id": layer_id,
+                    "color": layer['color'],
+                    "style": layer['type'],
+                    "filters": [filter_.model_dump() for filter_ in filters]
+                }
+
+            )
+        
+        return layers

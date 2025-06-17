@@ -54,7 +54,7 @@ class DataHandler:
         sql = f"""
         SELECT count(*)
         FROM {self.table_name}
-        WHERE"""
+        WHERE """
 
         sql += "\n AND ".join([map_filter._to_sql() for map_filter in filters])
 

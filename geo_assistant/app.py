@@ -1,18 +1,13 @@
 import dash
 import logging
 import pathlib
-import json
 from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 
-import plotly.graph_objects as go
-import plotly.express as px
 
-
-from geo_assistant.vector_store import FieldDefinitionStore
+from geo_assistant.data_dictionary import DataDictionaryStore
 from geo_assistant.handlers import MapHandler, DataHandler
 from geo_assistant.agent import GeoAgent
-
 
 
 # Initialize Classes
@@ -20,6 +15,15 @@ logger = logging.getLogger(__name__)
 # Set up app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
+
+# Setup vector store
+pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
+export_path = pathlib.Path("./pluto/field_def_index-test2")
+if export_path.exists():
+    data_dictionary = DataDictionaryStore.load(export_path)
+else:
+    data_dictionary = DataDictionaryStore.from_pdf(pdf_path, export_path, 45)
+
 # Set up geo-assistant
 agent = GeoAgent(
     map_handler=MapHandler(
@@ -29,16 +33,9 @@ agent = GeoAgent(
     data_handler=DataHandler(
         db_name="parcelsdb",
         table_name="parcels"
-    )
+    ),
+    supplement_info=data_dictionary.supplement_info
 )
-# Setup vector store
-pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
-export_path = pathlib.Path("./pluto/field_def_index")
-if export_path.exists():
-    index = FieldDefinitionStore.load(export_path)
-else:
-    index = FieldDefinitionStore.from_pdf(pdf_path, export_path)
-
 
 
 app.layout = html.Div([
@@ -154,7 +151,7 @@ def send_message(n_clicks, new_message, existing_log):
     field_def_query = new_message
     if len(agent.messages)>1:
         field_def_query += " " + agent.messages[-1]['content']
-    field_defs = index.query(new_message, k=10)
+    field_defs = data_dictionary.query(new_message, k=5)
     ai_response = agent.chat(new_message, field_defs)
     log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
     
