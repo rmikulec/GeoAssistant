@@ -12,11 +12,22 @@ fig.update_layout(
             "sourcetype": "vector",
             "sourceattribution": "Locally Hosted PLUTO Dataset",
             "source": [
-                "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf"
+                "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf?columns%20%3D%20%27BBL%27&filter=Borough%20%3D%20%27BK%27"
             ],
             "sourcelayer": "public.parcels",                   # ← must match your tileset name :contentReference[oaicite:0]{index=0}
             "type": "line",                                 # draw lines
             "color": "#B2FF0C",
+            "below": "traces" 
+        },
+        {
+            "sourcetype": "vector",
+            "sourceattribution": "Locally Hosted PLUTO Dataset",
+            "source": [
+                "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf?columns%20%3D%20%27BBL%27&filter=Borough%20%3D%20%27QN%27"
+            ],
+            "sourcelayer": "public.parcels",                   # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+            "type": "line",                                 # draw lines
+            "color": "#7803FF",
             "below": "traces" 
         }
       ]
