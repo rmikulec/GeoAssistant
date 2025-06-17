@@ -1,12 +1,8 @@
 import dash
 import logging
 import pathlib
-import json
 from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
-
-import plotly.graph_objects as go
-import plotly.express as px
 
 
 from geo_assistant.vector_store import FieldDefinitionStore
@@ -33,7 +29,7 @@ agent = GeoAgent(
 )
 # Setup vector store
 pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
-export_path = pathlib.Path("./pluto/field_def_index")
+export_path = pathlib.Path("./pluto/field_def_index-test")
 if export_path.exists():
     index = FieldDefinitionStore.load(export_path)
 else:

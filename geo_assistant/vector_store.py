@@ -20,10 +20,9 @@ You are an AI assistant specialized in extracting structured information from a 
    - `description`: the full “Description:” text, preserving line breaks and markdown formatting if present.  
    - `source`: the exact “Data Source:” line(s).  
    - `format`: the exact type from the “Format:” line, mapped to one of `'str'`, `'int'`, or `'float'`.  
-4. Extract every abbreviation into an `Abbreviation` object, using the exact abbreviation and its corresponding description.  
-5. Extract each code lookup into a `CodeLookup` object, including all `Code` items with their exact code and description pairs.
+4. Extract any other supplment information (info that is relevant to understanding the data dictionary) as readable markdown, including paragraphs, sections, and tables
 
-Produce exactly one JSON object conforming to the `DataDictionary` Pydantic schema, with keys `"field_definitions"`, `"abbreviations"`, and `"codes"`. Output only this JSON—no additional text, commentary, or metadata.```
+Produce exactly one JSON object conforming to the `DataDictionary` Pydantic schema, with keys `"field_definitions"`, and `"supplement_info"`. Output only this JSON—no additional text, commentary, or metadata.```
 """
 
 """
@@ -46,6 +45,7 @@ class FieldDefinition(BaseModel):
         description=(
             "Detailed explanation from the PDF's 'Description' section. "
             "Supports Markdown formatting."
+            "Include all relevant information, including any abbreviations or codes"
         )
     )
     source: str = Field(
@@ -62,25 +62,8 @@ class FieldDefinition(BaseModel):
     )
 
 
-class Abbreviation(BaseModel):
-    abbreviation: str
-    description: str
-
-
-class Code(BaseModel):
-    code: str
-    description: str
-
-class CodeLookup(BaseModel):
-    name: str
-    lookup: list[Code]
-
-
 class DataDictionary(BaseModel):
     field_defintions: list[FieldDefinition]
-    abbreviations: list[Abbreviation]
-    codes: list[CodeLookup]
-
 
 
 class FieldDefinitionStore:
@@ -213,7 +196,7 @@ class FieldDefinitionStore:
 
         pdf_text = ""
         for page_num, page in enumerate(reader.pages):
-            pdf_text += f"## Page {page_num} \n"
+            pdf_text += f"\n\n"
             pdf_text += page.extract_text()
             pdf_text += "\n"
 
