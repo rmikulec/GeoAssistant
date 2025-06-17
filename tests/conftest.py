@@ -8,6 +8,8 @@ import responses
 from openai import OpenAI
 from openai.types.responses import Response 
 
+from geo_assistant.config import Configuration
+
 FIXTURE_DIR = pathlib.Path(__file__).parent / "data"
 
 
@@ -36,7 +38,7 @@ def mock_tileserv():
             path = FIXTURE_DIR / name
             rsps.add(
                 method=responses.GET,
-                url=f"http://localhost:7800/{name}",
+                url=f"{Configuration.pg_tileserv_url}/{name}",
                 body=path.read_bytes(),
                 content_type="application/json",
                 status=200,
