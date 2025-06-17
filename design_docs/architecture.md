@@ -17,7 +17,7 @@ sequenceDiagram
     actor User
     User->>GeoAssistant: User Message
     GeoAssistant->>pg-tileserv: Tile Request with Filters
-    pg-tileserv->>PostGIS: Request for GEOJson
+    pg-tileserv->>PostGIS: Request for Metadata
     PostGIS->>pg-tileserv: TileData
     pg-tileserv->>GeoAssistant: Vector Tiles
     GeoAssistant->>PostGIS: Query
