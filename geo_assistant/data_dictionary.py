@@ -12,16 +12,15 @@ from typing import Literal, Union, Self
 FIELD_DEF_PARSE = """
 You are an AI assistant specialized in extracting structured information from a data dictionary PDF. You will be given the complete, page-by-page text of a data dictionary (tables and entries may be split across pages). Your job is to:
 
-1. Consolidate any multi-page or fragmented entries into a single coherent entry.  
-2. Extract only the data exactly as presented in the text; do not infer, alter, summarize, or add any information.  
-3. For each field definition, produce a `FieldDefinition` object capturing:
+1. Extract only the data exactly as presented in the text; do not infer, alter, summarize, or add any information.  
+2. For each field definition, produce a `FieldDefinition` object capturing:
    - `name`: The formatted name of the field. Usually one of these formats (MyField, myField, my_field)
    - `name_pretty`: The raw, display-friendly name of the field
    - `description`: the full “Description:” text, preserving line breaks and markdown formatting if present.  
    - `source`: the exact “Data Source:” line(s).  
    - `format`: the exact type from the “Format:” line, mapped to one of `'number'`, `'boolean'`, or `'string'`.  
 
-Produce exactly one JSON object conforming to the `DataDictionary` Pydantic schema, with key `"field_definitions". Output only this JSON—no additional text, commentary, or metadata.```
+Please include **every** field definition present in the entire text
 """
 
 SUPPLEMENT_INFO_PARSE = """
@@ -69,6 +68,10 @@ class FieldDefinition(BaseModel):
             "Normalized JSON data type based on the PDF's 'Format' section: 'string' for text, "
             "'number' for integers or floats, and 'boolean' for true/false values."
         )
+    )
+    enum: list[str] = Field(
+        description="If applicable, a subset of values that are only available as responses to this field. Defaults to null",
+        default=None
     )
 
 
@@ -192,7 +195,7 @@ class DataDictionaryStore:
 
 
     @classmethod
-    def from_pdf(cls, pdf_path: Union[str, pathlib.Path], export_path: Union[str, pathlib.Path]) -> Self:
+    def from_pdf(cls, pdf_path: Union[str, pathlib.Path], export_path: Union[str, pathlib.Path], appendix_start_page: int) -> Self:
         """
         Create a new Field Definition Index Store from a given data dictionary pdf
 
@@ -210,18 +213,21 @@ class DataDictionaryStore:
         reader = PdfReader(pdf_path)
 
         # Extract all PDF text
-        pdf_text = ""
-        for page_num, page in enumerate(reader.pages):
-            pdf_text += f"\n\n"
-            pdf_text += page.extract_text()
-            pdf_text += "\n"
+        field_def_text = ""
+        for page in reader.pages[:appendix_start_page]:
+            field_def_text += f"\n"
+            field_def_text += page.extract_text()
+        appendix_text = ""
+        for page in reader.pages[appendix_start_page:]:
+            appendix_text += f"\n"
+            appendix_text += page.extract_text()
 
         # Parse field definitions
         res = cls._client.responses.parse(
-            model="gpt-4o",
+            model="o4-mini",
             input=[
                 {'role': 'system', 'content': FIELD_DEF_PARSE},
-                {'role': 'user', 'content': pdf_text}
+                {'role': 'user', 'content': field_def_text}
             ],
             text_format=DataDictionary
         )
@@ -234,9 +240,8 @@ class DataDictionaryStore:
         # Parse Supplement Info
         res = cls._client.responses.create(
             instructions=SUPPLEMENT_INFO_PARSE,
-            input=pdf_text,
-            model="gpt-4o",
-            max_output_tokens=4_096
+            input=appendix_text,
+            model="o4-mini",
         )
 
         instance = cls(index, document_store, res.output_text)

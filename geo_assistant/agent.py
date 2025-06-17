@@ -162,6 +162,6 @@ class GeoAgent:
             )
         
         
-        ai_message = res.output[0].content[0].text
+        ai_message = res.output_text
         self.messages.append({'role': 'assistant', 'content': ai_message})
         return ai_message
