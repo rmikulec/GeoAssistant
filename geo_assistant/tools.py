@@ -1,6 +1,7 @@
-from geo_assistant.vector_store import FieldDefinition
+from geo_assistant.data_dictionary import FieldDefinition
 from geo_assistant.handlers import MapHandler
 
+import json
 
 def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
     props = {
@@ -13,6 +14,7 @@ def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
             "description": "Line or fill"
         }
     }
+
     for fd in field_defs:
         props[fd["name"]] = {
             "type": "object",
@@ -23,12 +25,14 @@ def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
                     "enum": [
                         "equal","greaterThan","lessThan",
                         "greaterThanOrEqual","lessThanOrEqual","notEqual"
-                    ]
+                    ] if fd["format"] != "string" else ["equal", "notEqual", "contains"]
                 }
             },
             "required": ["value","operator"],
             "description": fd["description"]
         }
+
+    print(json.dumps(props, indent=2))
 
     return {
         "type": "function",
