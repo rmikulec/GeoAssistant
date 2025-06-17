@@ -108,9 +108,14 @@ plotly==6.1.2
 pyarrow==20.0.0
     # via -r requirements.in
 pydantic==2.11.7
-    # via openai
+    # via
+    #   -r requirements.in
+    #   openai
+    #   pydantic-settings
 pydantic-core==2.33.2
     # via pydantic
+pydantic-settings==2.9.1
+    # via -r requirements.in
 pyogrio==0.11.0
     # via geopandas
 pyparsing==3.2.3
@@ -123,6 +128,8 @@ python-dateutil==2.9.0.post0
     # via
     #   matplotlib
     #   pandas
+python-dotenv==1.1.0
+    # via pydantic-settings
 pytz==2025.2
     # via pandas
 requests==2.32.4
@@ -151,7 +158,9 @@ typing-extensions==4.14.0
     #   pydantic-core
     #   typing-inspection
 typing-inspection==0.4.1
-    # via pydantic
+    # via
+    #   pydantic
+    #   pydantic-settings
 tzdata==2025.2
     # via pandas
 urllib3==2.4.0
