@@ -3,18 +3,18 @@ from pydantic import Field
 
 class DefaultConfiguration(BaseSettings):
     # OpenAI Configuration
-    openai_key = Field(default="no-key")
-    parsing_model = Field(default="o4-mini")
-    inference_model = Field(default="gpt-4o")
+    openai_key: str = Field(default="no-key")
+    parsing_model: str = Field(default="o4-mini")
+    inference_model: str = Field(default="gpt-4o")
 
     # App Configuration
-    data_store_path = Field(default="./pluto/field_def_index-test2")
-    pg_tileserv_url = Field(default="http://127.0.0.1:7800")
+    data_store_path: str = Field(default="./pluto/field_def_index-test2")
+    pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
     # Database configuration
     db_name: str = Field(default="parcelsdb")
     db_username: str = Field(default="gisuser")
     db_password: str = Field(default="pw")
-    db_port: str = Field(default=5432)
+    db_port: int = Field(default=5432)
     db_connection_url: str = Field(default="")
 
     def __init__(self, **values):
