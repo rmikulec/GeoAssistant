@@ -1,53 +1,51 @@
 import dash
+import logging
+import pathlib
+import json
 from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 
+import plotly.graph_objects as go
 import plotly.express as px
 
-fig = px.choropleth_map(height=300, zoom=3)
-fig.update_layout(
-    map_style="dark",
-    map_layers=[
-        {
-            "sourcetype": "vector",
-            "sourceattribution": "Locally Hosted PLUTO Dataset",
-            "source": [
-                "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf?columns%20%3D%20%27BBL%27&filter=Borough%20%3D%20%27BK%27"
-            ],
-            "sourcelayer": "public.parcels",                   # ← must match your tileset name :contentReference[oaicite:0]{index=0}
-            "type": "line",                                 # draw lines
-            "color": "#B2FF0C",
-            "below": "traces" 
-        },
-        {
-            "sourcetype": "vector",
-            "sourceattribution": "Locally Hosted PLUTO Dataset",
-            "source": [
-                "http://localhost:7800/public.parcels/{z}/{x}/{y}.pbf?columns%20%3D%20%27BBL%27&filter=Borough%20%3D%20%27QN%27"
-            ],
-            "sourcelayer": "public.parcels",                   # ← must match your tileset name :contentReference[oaicite:0]{index=0}
-            "type": "line",                                 # draw lines
-            "color": "#7803FF",
-            "below": "traces" 
-        }
-      ]
-)
-fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
 
-fig.update_layout(map_bounds={
-    "west":-74.2562146223856,
-    "east":-73.70017542782129,
-    "north": 40.91631520032119,
-    "south": 40.49449291374346
-})
+from geo_assistant.vector_store import FieldDefinitionStore
+from geo_assistant.handlers import MapHandler, DataHandler
+from geo_assistant.agent import GeoAgent
 
+
+
+# Initialize Classes
+logger = logging.getLogger(__name__)
+# Set up app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
+# Set up geo-assistant
+agent = GeoAgent(
+    map_handler=MapHandler(
+        table_name="parcels",
+        table_id="public.parcels"
+    ),
+    data_handler=DataHandler(
+        db_name="parcelsdb",
+        table_name="parcels"
+    )
+)
+# Setup vector store
+pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
+export_path = pathlib.Path("./pluto/field_def_index")
+if export_path.exists():
+    index = FieldDefinitionStore.load(export_path)
+else:
+    index = FieldDefinitionStore.from_pdf(pdf_path, export_path)
+
+
+
 app.layout = html.Div([
     # full-screen graph
     dcc.Graph(
         id="map-graph",
-        figure=fig,
+        figure=agent.map_handler.figure,
         style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
         config={
         'displayModeBar': False
@@ -125,9 +123,41 @@ dbc.Offcanvas(
     State("chat-drawer", "is_open")
 )
 def toggle_chat(n, is_open):
+    print("opening")
     if n:
         return not is_open
     return is_open
+
+
+@app.callback(
+    # 1) Append to the chat log
+    Output("chat-log", "children"),
+    # 2) Clear the input field
+    Output("chat-input", "value"),
+    # 3) The new figure for the graph
+    Output("map-graph", "figure"),
+    Input("send-btn", "n_clicks"),
+    State("chat-input", "value"),
+    State("chat-log", "children"),
+    prevent_initial_call=True,
+)
+def send_message(n_clicks, new_message, existing_log):
+    if not new_message:
+        # no change if input is empty
+        return existing_log, ""
+    
+    # start from empty list if None
+    log = existing_log or []
+    
+    # wrap each message in a div (you can customize the className/style)
+    log.append(html.Div(f"User: {new_message}", className="mb-2"))
+    field_defs = index.query(new_message)
+    ai_response = agent.chat(new_message, field_defs)
+    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+    
+    # clear the input after sending
+    return log, "", agent.map_handler.update_figure()
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8050)
