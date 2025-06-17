@@ -22,36 +22,3 @@ gdf.to_postgis(
     index=False
 )
 print("Loaded", len(gdf), "parcels into PostGIS.")
-
-with engine.begin() as conn:
-    # 1) enable PostGIS
-    conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
-
-    # 2) add PK (only if not present)
-    conn.execute(text("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                 WHERE conrelid = 'parcels'::regclass
-                   AND contype = 'p'
-            ) THEN
-              ALTER TABLE parcels ADD COLUMN id SERIAL PRIMARY KEY;
-            END IF;
-        END$$;
-    """))
-
-with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-    conn.execute(text("""
-        CREATE INDEX CONCURRENTLY IF NOT EXISTS parcels_geom_gist
-          ON parcels USING GIST (geometry);
-    """))
-
-with engine.begin() as conn:
-    # 4) other useful indexes
-    #conn.execute(text("CREATE INDEX IF NOT EXISTS parcels_borough_idx ON parcels (borough);"))
-
-    # 5) cluster & vacuum/analyze
-    conn.execute(text("CLUSTER parcels USING parcels_geom_gist;"))
-    conn.execute(text("VACUUM ANALYZE parcels;"))
-print("Indexes created and table analyzed.")
