@@ -173,10 +173,11 @@ class FieldDefinitionStore:
         docs = cls._add_embeddings(docs)
 
         embeddings_np = np.array([doc['embedding'] for doc in docs], dtype="float32")
+        faiss.normalize_L2(embeddings_np)
         dim = embeddings_np.shape[1]
 
         # we'll use a simple L2 index wrapped in an ID map
-        index = faiss.IndexFlatL2(dim)
+        index = faiss.IndexFlatIP(dim)
         index = faiss.IndexIDMap(index)
 
         # Assign Ids
@@ -251,12 +252,14 @@ class FieldDefinitionStore:
             input=[message]
         ).data[0].embedding
         q_np = np.array([q_emb], dtype="float32")
+        faiss.normalize_L2(q_np)
 
-        _, neighbors = self.index.search(q_np, k)
+        distances, neighbors = self.index.search(q_np, k)
 
         results = []
-        for rank, idx in enumerate(neighbors[0], start=1):
+        for rank, (idx, distance) in enumerate(zip(neighbors[0],distances[0]), start=1):
             doc = self.document_store[str(idx)]
+            doc['distance'] = distance
             results.append(doc)
 
         return results
