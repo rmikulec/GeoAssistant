@@ -118,6 +118,7 @@ class GeoAgent:
         )
 
         field_defs = await self._get_field_defs(user_message)
+        context = "\n".join(await self.info_store.query(user_message))
 
         tool_defs = [
             tools._build_add_layer_def(field_defs),

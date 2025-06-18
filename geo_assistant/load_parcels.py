@@ -3,7 +3,7 @@ import argparse
 import sys
 
 import geopandas as gpd
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from geo_assistant.config import Configuration
 
@@ -12,12 +12,13 @@ def parse_args():
         description="Load a GeoParquet into PostGIS (reprojecting to Web-Mercator by default)."
     )
     p.add_argument(
-        "parquet_path",
+        "--parquet",
+        "-p",
         help="Path to the input Parquet file (e.g. ./pluto/map.parquet)",
     )
-
     p.add_argument(
         "--table",
+        "-t",
         default="parcels",
         help="Destination table name in PostGIS (default: parcels)",
     )
@@ -40,6 +41,7 @@ def parse_args():
     )
     p.add_argument(
         "--index",
+        "-i",
         action="store_true",
         help="Write the DataFrame index as a column in the table",
     )
@@ -50,7 +52,7 @@ def main():
 
     # 1) load
     try:
-        gdf = gpd.read_parquet(args.parquet_path)
+        gdf = gpd.read_parquet(args.parquet)
     except Exception as e:
         print(f"Error reading Parquet: {e}", file=sys.stderr)
         sys.exit(1)
@@ -78,6 +80,33 @@ def main():
         sys.exit(1)
 
     print(f"Loaded {len(gdf)} features into table '{args.table}'.")
+
+    # 6) create spatial index on the geometry column
+    geom_col = gdf.geometry.name  # usually "geometry"
+    idx_name = f"idx_{args.table}_{geom_col}"
+    create_idx_sql = f"""
+    CREATE INDEX IF NOT EXISTS {idx_name}
+      ON {args.table}
+      USING GIST ({geom_col});
+    """
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(create_idx_sql))
+        print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
+    except Exception as e:
+        print(f"Error creating spatial index: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # 7) update planner statistics
+    analyze_sql = f"ANALYZE {args.table};"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(analyze_sql))
+        print(f"Analyzed table '{args.table}' to update planner statistics.")
+    except Exception as e:
+        print(f"Error analyzing table: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

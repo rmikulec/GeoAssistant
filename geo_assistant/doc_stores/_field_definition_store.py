@@ -13,7 +13,7 @@ You are an AI assistant specialized in extracting structured information from a 
 
 1. Extract only the data exactly as presented in the text; do not infer, alter, summarize, or add any information.  
 2. For each field definition, produce a `FieldDefinition` object capturing:
-   - `name`: The formatted name of the field. Usually one of these formats (MyField, myField, my_field)
+   - `name`: The formatted name of the field. Usually one of these formats (MyField, myField, my_field, MYFIELD, MY_FIELD)
    - `name_pretty`: The raw, display-friendly name of the field
    - `description`: the full “Description:” text, preserving line breaks and markdown formatting if present.  
    - `source`: the exact “Data Source:” line(s).  
@@ -27,7 +27,7 @@ class FieldDefinition(BaseModel):
     name: str = Field(
         description=(
             "Machine-friendly field identifier"
-            "(will be in ClassCase, snake_case or camelCase)."
+            "(will be in ClassCase, snake_case, ALL_CAPS or camelCase)."
         )
     )
     name_pretty: str = Field(
@@ -73,6 +73,7 @@ class FieldDefinitionStore(DocumentStore):
     async def add_pdf(
         self,
         pdf_path: Union[str, pathlib.Path],
+        table: str,
         start_page: int = None,
         end_page: int = None,
         batch_size: int = 2,
@@ -81,6 +82,7 @@ class FieldDefinitionStore(DocumentStore):
         """
         Build a new field-definition FAISS store from the given PDF.
         """
+        self.table = table
         # Read & split PDF text
         pdf_path = pathlib.Path(pdf_path)
         reader   = PdfReader(pdf_path)
@@ -117,9 +119,11 @@ class FieldDefinitionStore(DocumentStore):
         # Turn each FieldDefinition into a document with id/text/metadata
         docs: List[Dict[str, Any]] = []
         for idx, fld in enumerate(field_definitions):
+            id_ = len(self.documents) + idx
             docs.append({
-                "id":   idx,
+                "id":   id_,
                 "text": f"{fld.name_pretty}: {fld.description}",
+                "table": self.table,
                 **fld.model_dump()  # all other metadata
             })
 

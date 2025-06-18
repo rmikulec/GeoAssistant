@@ -27,18 +27,17 @@ class MapHandler:
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
 
-    def __init__(self, table_id: str, table_name: str):
-        if table_id not in self._tileserv_index:
-            raise InvalidTileservTableID(table_id)
-        else:
-            self.table_id = table_id
-            self.table_name = table_name
+    def __init__(self, tables: list[str]):
+        for table_id in tables:
+            if table_id not in self._tileserv_index:
+                raise InvalidTileservTableID(table_id)
 
+        self.tables = tables
 
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)
         self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        self.figure.update_layout(map_bounds=self._default_bounds)
+        self.figure.update_layout(map_bounds=self._global_bounds)
     
         # Key attributes for udpating the figure
         self.map_layers: dict = {}
@@ -50,57 +49,49 @@ class MapHandler:
         )
 
     @cached_property
-    def _tileserve_table(self):
+    def _tables_meta(self):
         """
         The direct json data for the table from pg-tileserv
         """
-        return requests.get(
-            f"{Configuration.pg_tileserv_url}/{self.table_id}.json"
-        ).json()
+        return {
+            table: requests.get(
+                f"{Configuration.pg_tileserv_url}/{table}.json"
+            ).json()
+            for table in self.tables
+        }
     
-    @property
-    def _base_tileurl(self):
+    def _get_base_tileurl(self, table_id: str):
         """
         Base tile url to be used as a source for vector layers
         """
-        return self._tileserve_table['tileurl']+"?columns%20%3D%20%27BBL%27"
+        return self._table_meta[table_id]['tileurl']+"?columns%20%3D%20%27BBL%27"
 
     @property
-    def _default_bounds(self):
-        """
-        The default view window for the map. This window is the minimum size in order to view
-        all rows in the table at once
-        """
-        bounds = self._tileserve_table['bounds']
+    def _global_bounds(self):
+        # union the extents of all tables
+        w_list, s_list, e_list, n_list = [], [], [], []
+        for meta in self._tables_meta.values():
+            w, s, e, n = meta["bounds"]
+            w_list.append(w); s_list.append(s)
+            e_list.append(e); n_list.append(n)
         return {
-            "west": bounds[0],
-            "east": bounds[2],
-            "south": bounds[1],
-            "north": bounds[3]
-        }
-    
-    @property
-    def _properties(self):
-        """
-        Properties in the table that can be used in a filter
-        """
-        return {
-            prop["name"]: prop["type"]
-            for prop in self._tileserve_table['properties']
+            "west": min(w_list),
+            "south": min(s_list),
+            "east":  max(e_list),
+            "north": max(n_list),
         }
     
 
-
-    def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+    def _add_map_layer(self, table_id: str, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
         filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters])
         # Create the layer
         layer = {
             "sourcetype": "vector",
             "sourceattribution": "Locally Hosted PLUTO Dataset",
             "source": [
-                self._base_tileurl + "&filter=" + filter_
+                self._get_base_tileurl(table_id) + "&filter=" + filter_
             ],
-            "sourcelayer": self.table_id,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+            "sourcelayer": table_id,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
             "type": style,                                 # draw lines
             "color": color,
             "below": "traces" 
@@ -138,7 +129,7 @@ class MapHandler:
         else:
             self.figure = px.choropleth_map(zoom=3)
             self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-            self.figure.update_layout(map_bounds=self._default_bounds)
+            self.figure.update_layout(map_bounds=self._global_bounds)
             self.figure.update_layout(map_style="dark")
 
         return self.figure
