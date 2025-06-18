@@ -3,6 +3,7 @@ dash-bootstrap-components
 faiss-cpu
 geopandas
 geoalchemy2
+googlemaps
 gunicorn
 matplotlib
 openai

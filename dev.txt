@@ -82,6 +82,8 @@ geoalchemy2==0.17.1
     # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 geopandas==1.1.0
     # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+googlemaps==4.10.0
+    # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 gunicorn==23.0.0
     # via -r /Users/ryan/projects/paces-gis-qa/requirements.txt
 h11==0.16.0
@@ -283,6 +285,7 @@ requests==2.32.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash
+    #   googlemaps
     #   responses
 responses==0.25.7
     # via -r dev.in
