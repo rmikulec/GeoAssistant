@@ -108,7 +108,7 @@ class MapHandler:
                 "below": "traces" 
             }
             # Register it to the map
-            table_layer_id = f"{table}_{layer_id}"
+            table_layer_id = f"{table}.{layer_id}"
             self.map_layers[table_layer_id] = layer
             self._layer_ids[layer_id].append(table_layer_id)
         # Add all filters to layer_filters dict, keeping them together
@@ -119,9 +119,9 @@ class MapHandler:
         """
         Removes a layer from the map
         """
-        for table_layer_id in self._layer_ids:
-            del self.map_layers[layer_id]
-            del self._layer_filters[layer_id]
+        for table_layer_id in self._layer_ids[layer_id]:
+            del self.map_layers[table_layer_id]
+        del self._layer_filters[layer_id]
         del self._layer_ids[layer_id]
         return f"Layer {layer_id} removed from the map"
 
