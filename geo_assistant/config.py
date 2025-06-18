@@ -6,9 +6,12 @@ class DefaultConfiguration(BaseSettings):
     openai_key: str = Field(default="no-key")
     parsing_model: str = Field(default="o4-mini")
     inference_model: str = Field(default="gpt-4o")
+    embedding_model: str = Field(default="text-embedding-3-small")
+    embedding_dims: int = Field(default=1536)
 
     # App Configuration
-    data_store_path: str = Field(default="./pluto/field_def_index-test2")
+    docstore_path: str = Field(default="./docstore")
+    data_dictionary_version: str = Field(default="1.0.0")
     pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
     # Database configuration
     db_name: str = Field(default="parcelsdb")

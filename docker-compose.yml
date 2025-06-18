@@ -46,10 +46,8 @@ services:
       tileserv:
         condition: service_started
     environment:
-      # share the same DB URL
-      DATABASE_URL: postgresql://gisuser@db:5432/parcelsdb
-      # any other env vars your app needs, e.g.:
-      # REDIS_URL: redis://redis:6379
+      # share docstore volume
+      DOCSTORE_DIR: /usr/src/app/data/docstore
     ports:
       - "8050:8050"
     command: >
@@ -60,3 +58,4 @@ services:
 
 volumes:
   pgdata:
+  docstore:
