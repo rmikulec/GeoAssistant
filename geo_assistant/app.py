@@ -43,22 +43,23 @@ app.layout = html.Div([
             dcc.Loading(
                 html.I(id="chat-btn-icon", className='fa-solid fa-comments'),
                 id="loading-chat-btn",
-                type="default"
+                type="default",
+                color="rgba(255, 255, 255, 0.8)"
             ),
-            id="open-chat", color="primary", size="lg"
+            id="open-chat", color="primary", size="lg", className="glass-button"
         ),
         style={"position": "fixed", "top": "15px", "right": "15px", "zIndex": 1000},
     ),
 
     dbc.Offcanvas(
         html.Div([
-            html.H5("Chat", className="mb-3 text-white"),
+            html.H5("Chat", className="mb-1 text-white"),
 
             # apply our frosted-glass chat log class
             html.Div(
                 id="chat-log",
                 className="flex-grow-1 overflow-auto mb-3 glass-chat-log",
-                style={"padding": "10px", "whiteSpace": "pre-wrap", "color": "#fff"}
+                style={"padding": "5px", "whiteSpace": "pre-wrap", "color": "#fff"}
             ),
 
             # input + send button group
@@ -69,7 +70,7 @@ app.layout = html.Div([
                         placeholder="Type your message…",
                         type="text",
                         debounce=True,
-                        className="glass-input text-gray"
+                        className="glass-input text-white"
                     ),
                     dbc.Button(
                         html.I(className="fa-solid fa-paper-plane"),
@@ -88,7 +89,7 @@ app.layout = html.Div([
         is_open=False,
         placement="end",
         className="glass-offcanvas",
-        style={"width": "350px", "zIndex": "1100"},
+        style={"width": "400px", "zIndex": "1100"},
     )
 ])
 
