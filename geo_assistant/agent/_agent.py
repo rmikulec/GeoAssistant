@@ -272,9 +272,7 @@ class GeoAgent:
             context_info=context,
             tables=set([field['table'] for field in fields])
         )
-        print(system_message)
         # Hit openai to generate a step-by-step plan for the analysis
-        print("Checking Openai")
         res: ParsedResponse[GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
             input=[
                 {'role': 'system', 'content': system_message},
@@ -287,7 +285,6 @@ class GeoAgent:
             text_format=DynGISModel
         )
         analysis_steps = res.output_parsed.steps
-        print(res.output_parsed.model_dump_json(indent=2))
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
         for step in analysis_steps:
