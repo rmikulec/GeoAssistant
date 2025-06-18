@@ -1,4 +1,4 @@
-from geo_assistant.data_dictionary import FieldDefinition
+from geo_assistant.doc_stores._field_definition_store import FieldDefinition
 from geo_assistant.handlers import MapHandler
 
 import json
