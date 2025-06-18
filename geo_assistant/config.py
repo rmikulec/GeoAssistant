@@ -11,7 +11,8 @@ class DefaultConfiguration(BaseSettings):
 
     # App Configuration
     docstore_path: str = Field(default="./docstore")
-    data_dictionary_version: str = Field(default="1.0.0")
+    info_store_version: str = Field(default="1.0.5")
+    field_def_store_version: str = Field(default="1.0.5")
     pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
     # Database configuration
     db_name: str = Field(default="parcelsdb")

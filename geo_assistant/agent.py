@@ -7,6 +7,7 @@ from typing import Callable, Any
 
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
+from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
@@ -46,6 +47,8 @@ class GeoAgent:
         self, 
         map_handler: MapHandler,
         data_handler: DataHandler,
+        field_store: FieldDefinitionStore = None,
+        info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
         supplement_info: str = None
     ):
@@ -53,7 +56,17 @@ class GeoAgent:
         self.supplement_info = supplement_info
         self.map_handler = map_handler
         self.data_handler = data_handler
-        self.client = openai.OpenAI(api_key=pathlib.Path("./openai.key").read_text())
+        self.client = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
+
+        if field_store is None:
+            self.field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
+        else:
+            self.field_store = field_store
+        
+        if info_store is None:
+            self.info_store = SupplementalInfoStore(version=Configuration.info_store_version)
+        else:
+            self.info_store = info_store
 
         self.messages = [
             {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
@@ -77,7 +90,13 @@ class GeoAgent:
         }
     
 
-    def chat(self, user_message: str, field_defs: list[dict]) -> str:
+    async def _get_field_defs(self, message: str, k: int = 5):
+        if len(self.messages)>1:
+            field_def_query += " " + self.messages[-1]['content']
+        field_defs = await self.field_store.query(message, k=5)
+        return field_defs
+
+    async def chat(self, user_message: str) -> str:
         """
         Function used to 'chat' with the
             GeoAgent. To use, must pass a user-message and a list of field definitions. Chat will
@@ -95,13 +114,15 @@ class GeoAgent:
             {'role': 'user', 'content': user_message}
         )
 
+        field_defs = await self._get_field_defs(user_message)
+
         tool_defs = [
             tools._build_add_layer_def(field_defs),
             tools._build_remove_layer_def(self.map_handler),
             tools._build_reset_def()
         ]
 
-        res = self.client.responses.create(
+        res = await self.client.responses.create(
             model=self.model,
             input=self.messages,
             tools=tool_defs
@@ -157,7 +178,7 @@ class GeoAgent:
             })
     
         if made_tool_calls:
-            res = self.client.responses.create(
+            res = await self.client.responses.create(
                 model=self.model,
                 input=self.messages,
             )
