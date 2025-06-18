@@ -132,10 +132,23 @@ def send_message(n_clicks, new_message, existing_log):
     log = existing_log or []
     
     # wrap each message in a div (you can customize the className/style)
-    log.append(html.Div(f"User: {new_message}", className="mb-2"))
+    # user bubble
+    log.append(
+        html.Div(
+            new_message,
+            className="chat-message user-message"
+        )
+    )
 
     ai_response = asyncio.run(agent.chat(new_message))
-    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+
+    # assistant bubble
+    log.append(
+        html.Div(
+            ai_response,
+            className="chat-message assistant-message"
+        )
+    )
     
     # clear the input after sending
     return log, "", agent.map_handler.update_figure(), no_update

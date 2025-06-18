@@ -1,7 +1,4 @@
 /* tint the backdrop under the offcanvas */
-.offcanvas-backdrop.show {
-    background-color: rgba(0, 0, 0, 0.2) !important;
-}
 
 /* apply the “liquid glass” look to any offcanvas with this class */
 .offcanvas.glass-offcanvas {
@@ -10,4 +7,79 @@
     -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     border: none;
+}
+/* frosted-glass chat log */
+.glass-chat-log {
+    background-color: rgba(255, 255, 255, 0.3) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 6px;
+}
+
+/* frosted-glass inputs & buttons */
+.glass-input,
+.glass-button {
+    background-color: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 4px;
+}
+
+/* tweak placeholder opacity */
+.glass-input::placeholder {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* make the send icon white & semi-opaque */
+.glass-button .fa-paper-plane {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* on hover, bump opacity */
+.glass-button:hover {
+    background-color: rgba(255, 255, 255, 0.4) !important;
+}
+  
+
+/* ensure chat-log stacks bubbles vertically */
+#chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;  /* keep your existing padding or adjust */
+}
+
+/* base bubble */
+.chat-message {
+    padding: 10px 14px;
+    border-radius: 18px;
+    max-width: 100%;
+    word-wrap: break-word;
+    line-height: 1.4;
+}
+
+/* user bubble (right side) */
+.user-message {
+    background-color: rgba(146, 33, 33, 0.288);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+    border-bottom-left-radius: 10px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+/* assistant bubble (left side, frosted glass) */
+.assistant-message {
+    background-color: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #000;
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+    border-bottom-right-radius: 10px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
 }
