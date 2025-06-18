@@ -53,9 +53,11 @@ class GeoAgent:
         field_store: FieldDefinitionStore = None,
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
-        supplement_info: str = None
+        supplement_info: str = None,
+        use_smart_search: bool = True
     ):
         self.model = model
+        self.use_smart_search = use_smart_search
         self.supplement_info = supplement_info
         self.map_handler = map_handler
         self.data_handler = data_handler
@@ -85,6 +87,21 @@ class GeoAgent:
             "reset_map":        self.map_handler._reset_map,
         }
 
+
+    @property
+    def conversation(self):
+        conversation_str = ""
+        for message in self.messages:
+            if not isinstance(message, dict):
+                # This will skip any tool messages
+                continue
+            if message.get('role', None) == 'assistant':
+                conversation_str+=f"\n GeoAssist: {message['content']}"
+            elif message.get('role', None) == 'user':
+                conversation_str+=f"\n User: {message['content']}"
+        return conversation_str
+    
+
     def _update_dev_message(self):
         self.messages[0] = {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
                 map_status=json.dumps(self.map_handler.status,indent=2),
@@ -93,10 +110,17 @@ class GeoAgent:
         }
     
 
-    async def _get_field_defs(self, message: str, k: int = 5):
-        if len(self.messages)>1:
-            message += " " + self.messages[-1]['content']
-        field_defs = await self.field_store.query(message, k=5)
+    async def _get_field_defs(self, message: str, context: str = None, k: int = 5):
+        conversation = self.conversation + f"\n User: {message}"
+        if self.use_smart_search:
+            field_defs = await self.field_store.smart_query(
+                message,
+                conversation=conversation,
+                context=context,
+                k=k
+            )
+        else:
+            field_defs = await self.field_store.query(message, k=k)
         return field_defs
 
     async def chat(self, user_message: str) -> str:
@@ -117,7 +141,10 @@ class GeoAgent:
             {'role': 'user', 'content': user_message}
         )
 
-        field_defs = await self._get_field_defs(user_message)
+        context_search = await self.info_store.query(user_message, k=3)
+        context = "\n".join([result['markdown'] for result in context_search])
+        field_defs = await self._get_field_defs(user_message, context)
+
 
         tool_defs = [
             tools._build_add_layer_def(field_defs),
@@ -156,7 +183,8 @@ class GeoAgent:
                     filters.append(GeoFilter(
                         field=filter_name,
                         value=filter_details['value'],
-                        op=filter_details['operator']
+                        op=filter_details['operator'],
+                        table="public."+self.field_store.get_docs_by_kv(key='name', value=filter_name)[0]['table']
                     ))
             
                 # Run the function with the new filter arg injected

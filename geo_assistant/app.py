@@ -19,11 +19,13 @@ server = app.server
 # Set up geo-assistant
 agent = GeoAgent(
     map_handler=MapHandler(
-        table_name="parcels",
-        table_id="public.parcels"
+        tables=[
+            "public.transmission",
+            "public.pluto"
+        ]
     ),
     data_handler=DataHandler(
-        table_name="parcels"
+        default_table="pluto"
     ),
 )
 

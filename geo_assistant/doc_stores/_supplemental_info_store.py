@@ -84,12 +84,12 @@ class SupplementalInfoStore(DocumentStore):
         # Prepare a single “document” containing all supplemental info
         docs: List[Dict[str, Any]] = [
             {
-                "id":   id_,
+                "id":   len(self.documents) + idx,
                 "text": f"{section.title}: {section.markdown}",
                 "source": str(pdf_path.name),
                 **section.model_dump()
             }
-            for id_, section in enumerate(sections)
+            for idx, section in enumerate(sections)
         ]
 
         # 5) Batch-add into FAISS + JSON
