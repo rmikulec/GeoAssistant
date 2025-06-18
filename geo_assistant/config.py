@@ -20,6 +20,9 @@ class DefaultConfiguration(BaseSettings):
     db_password: str = Field(default="pw")
     db_port: int = Field(default=5432)
     db_connection_url: str = Field(default="")
+    
+    #Other
+    geometry_column: str = Field(default="geometry")
 
     def __init__(self, **values):
         super().__init__(**values)

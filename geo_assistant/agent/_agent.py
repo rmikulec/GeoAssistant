@@ -6,13 +6,18 @@ import pathlib
 import openai
 import json
 
+from openai.types.responses import ParsedResponse
+from collections import defaultdict
 from typing import Callable, Any
-
+from jinja2 import Template
+from sqlalchemy import Engine
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
 from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
+
+from geo_assistant.agent._steps import GISAnalysis, AggregateStep, FilterStep, MergeStep, BufferStep
 
 
 logger = logging.getLogger(__name__)
@@ -48,6 +53,7 @@ class GeoAgent:
 
     def __init__(
         self, 
+        engine: Engine,
         map_handler: MapHandler,
         data_handler: DataHandler,
         field_store: FieldDefinitionStore = None,
@@ -57,6 +63,7 @@ class GeoAgent:
         use_smart_search: bool = True
     ):
         self.model = model
+        self.engine = engine
         self.use_smart_search = use_smart_search
         self.supplement_info = supplement_info
         self.map_handler = map_handler
@@ -217,3 +224,79 @@ class GeoAgent:
         ai_message = res.output_text
         self.messages.append({'role': 'assistant', 'content': ai_message})
         return ai_message
+    
+
+    def _verify_fields(self, field_results: list[dict]):
+        updated_results = []
+
+        for metadata in self.map_handler._tables_meta.values():
+            for property in metadata['properties']:
+                for field_result in field_results:
+                    if property['name'].lower() == field_result['name'].lower():
+                        temp = field_result.copy()
+                        temp.pop('name')
+                        updated_results.append(
+                            {
+                                "name": property['name'],
+                                **field_result
+                            }
+                        )
+
+        return updated_results
+
+    async def run_analysis(self, user_message: str):
+        """
+        Runs an analysis given a user message. This is a more time consuming process than 'chat',
+        as it forces the agent to *think* and plan steps, then executes sql to create tables for
+        the analysis
+
+        Args:
+            - user_message(str): The question or statement from the user detailing the analysis
+        """
+        # Setup the system message template
+        system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
+        # Query for relevant fields
+        field_results = await self.field_store.query(user_message, k=10)
+        fields = self._verify_fields(field_results)
+        # Create a new Analysis Model with those fields as Enums (This forces the model to only
+        #   use valid fields)
+        DynGISModel = GISAnalysis.build_model(
+            steps=[AggregateStep, MergeStep, BufferStep],
+            fields=[field['name'] for field in fields]
+        )
+        # Query for relative info
+        context = await self.info_store.query(user_message, k=5)
+        # Generate the system message
+        system_message = system_message_template.render(
+            field_definitions=fields,
+            context_info=context,
+            tables=set([field['table'] for field in fields])
+        )
+        print(system_message)
+        # Hit openai to generate a step-by-step plan for the analysis
+        print("Checking Openai")
+        res: ParsedResponse[GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+            input=[
+                {'role': 'system', 'content': system_message},
+                {'role': 'user', 'content': user_message}
+            ],
+            model="o4-mini",
+            reasoning={
+                "effort":"high",
+            },
+            text_format=DynGISModel
+        )
+        analysis_steps = res.output_parsed.steps
+        print(res.output_parsed.model_dump_json(indent=2))
+        # Run through the steps, executing each query
+        print(f"Steps: {[step.name for step in analysis_steps]}")
+        for step in analysis_steps:
+            print(f"Running {step.name}")
+            print(step.reasoning)
+            try:
+                step._execute(self.engine)
+            except Exception as e:
+                raise e
+        # Drop all intermediate tables
+        for step in analysis_steps[:-1]:
+            step._drop(engine=self.engine)

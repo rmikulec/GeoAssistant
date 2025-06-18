@@ -1,4 +1,4 @@
-from geo_assistant.agent import GeoAgent
+from geo_assistant.agent._agent import GeoAgent
 
 __all__ = [
     "GeoAgent"
