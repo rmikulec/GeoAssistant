@@ -2,7 +2,7 @@ import dash
 import logging
 import asyncio
 import pathlib
-from dash import html, dcc, Input, Output, State
+from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
 from geo_assistant.handlers import MapHandler, DataHandler
@@ -39,9 +39,15 @@ app.layout = html.Div([
 
     # chat‐open button
     html.Div(
-        dbc.Button(html.I(className='fa-solid fa-comments'),
-                   id="open-chat", color="primary", size="lg"),
-        style={"position": "fixed", "top": "10px", "right": "10px", "zIndex": 1000}
+        dbc.Button(
+            dcc.Loading(
+                html.I(id="chat-btn-icon", className='fa-solid fa-comments'),
+                id="loading-chat-btn",
+                type="default"
+            ),
+            id="open-chat", color="primary", size="lg"
+        ),
+        style={"position": "fixed", "top": "15px", "right": "15px", "zIndex": 1000},
     ),
 
     # offcanvas chat
@@ -49,22 +55,18 @@ app.layout = html.Div([
         html.Div([
             html.H5("Chat", className="mb-3"),
 
-            # ← wrap the chat log in a Loading spinner
-            dcc.Loading(
-                html.Div(
-                    id="chat-log",
-                    className="flex-grow-1 overflow-auto mb-3",
-                    style={
-                        "backgroundColor": "#f8f9fa",
-                        "padding": "10px",
-                        "borderRadius": "4px",
-                        "border": "1px solid #dee2e6",
-                        "whiteSpace": "pre-wrap"
-                    }
-                ),
-                id="loading-chat",
-                type="default"
+            html.Div(
+                id="chat-log",
+                className="flex-grow-1 overflow-auto mb-3",
+                style={
+                    "backgroundColor": "#f8f9fa",
+                    "padding": "10px",
+                    "borderRadius": "4px",
+                    "border": "1px solid #dee2e6",
+                    "whiteSpace": "pre-wrap"
+                }
             ),
+
 
             # input + send button
             dbc.InputGroup(
@@ -113,6 +115,7 @@ def toggle_chat(n, is_open):
     Output("chat-log",   "children"),
     Output("chat-input", "value"),
     Output("map-graph",  "figure"),
+    Output("chat-btn-icon",  "children"),   # ← new!
     Input("send-btn",    "n_clicks"),
     State("chat-input",  "value"),
     State("chat-log",    "children"),
@@ -141,7 +144,7 @@ def send_message(n_clicks, new_message, existing_log):
     log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
     
     # clear the input after sending
-    return log, "", agent.map_handler.update_figure()
+    return log, "", agent.map_handler.update_figure(), no_update
 
 
 if __name__ == "__main__":
