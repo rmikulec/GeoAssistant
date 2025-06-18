@@ -1,5 +1,6 @@
 import requests
 from functools import cached_property
+from collections import defaultdict
 
 from plotly.graph_objects import Figure
 import plotly.express as px
@@ -64,7 +65,7 @@ class MapHandler:
         """
         Base tile url to be used as a source for vector layers
         """
-        return self._table_meta[table_id]['tileurl']+"?columns%20%3D%20%27BBL%27"
+        return self._tables_meta[table_id]['tileurl']+"?columns%20%3D%20%27BBL%27"
 
     @property
     def _global_bounds(self):
@@ -82,23 +83,28 @@ class MapHandler:
         }
     
 
-    def _add_map_layer(self, table_id: str, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
-        filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters])
-        # Create the layer
-        layer = {
-            "sourcetype": "vector",
-            "sourceattribution": "Locally Hosted PLUTO Dataset",
-            "source": [
-                self._get_base_tileurl(table_id) + "&filter=" + filter_
-            ],
-            "sourcelayer": table_id,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
-            "type": style,                                 # draw lines
-            "color": color,
-            "below": "traces" 
-        }
-        # Register it to the map
-        self.map_layers[layer_id] = layer
-        self._layer_filters[layer_id] = filters
+    def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+        sorted_filters = defaultdict(list)
+        for filter_ in filters:
+            sorted_filters[filter_.table].append(filter_)
+
+        for table, filters_ in sorted_filters.items():
+            filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters_])
+            # Create the layer
+            layer = {
+                "sourcetype": "vector",
+                "sourceattribution": "Locally Hosted PLUTO Dataset",
+                "source": [
+                    self._get_base_tileurl(table) + "&filter=" + filter_
+                ],
+                "sourcelayer": table,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+                "type": style,                                 # draw lines
+                "color": color,
+                "below": "traces" 
+            }
+            # Register it to the map
+            self.map_layers[f"{table}_{layer_id}"] = layer
+            self._layer_filters[f"{table}_{layer_id}"] = filters
     
 
     def _remove_map_layer(self, layer_id: str) -> str:

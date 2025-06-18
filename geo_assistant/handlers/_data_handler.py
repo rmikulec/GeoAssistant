@@ -1,6 +1,7 @@
 import geopandas as gpd
 from sqlalchemy import create_engine, text
 from typing import Optional, List, Union
+from collections import defaultdict
 
 from geo_assistant.handlers._filter import GeoFilter
 from geo_assistant.config import Configuration
@@ -46,17 +47,19 @@ class DataHandler:
     def filter_count(
         self,
         filters: List[GeoFilter],
-        table: Optional[str] = None
     ) -> int:
-        tbl = table or self.default_table
-        if not tbl:
-            raise ValueError("Must supply a table (or set default_table on init).")
+        sorted_filters = defaultdict(list)
+        for filter_ in filters:
+            sorted_filters[filter_.table].append(filter_)
 
-        where_clause = " AND ".join(f._to_sql() for f in filters)
-        sql = f"SELECT COUNT(*) FROM {tbl} WHERE {where_clause};"
+        total_count = 0
+        for table, filters_ in sorted_filters.items():
+            where_clause = " AND ".join(f._to_sql() for f in filters)
+            sql = f"SELECT COUNT(*) FROM {table} WHERE {where_clause};"
 
-        with self.engine.connect() as conn:
-            return conn.execute(text(sql)).scalar()
+            with self.engine.connect() as conn:
+                total_count += conn.execute(text(sql)).scalar()
+        return total_count
 
     def spatial_join(
         self,

@@ -5,8 +5,23 @@ import json
 import numpy as np
 
 from abc import ABC
+from pydantic import BaseModel
 
 from geo_assistant.config import Configuration
+
+
+
+KEY_TERMS_SYSTEM_MESSAGE = """
+You are an expert at querying large databases for relevant information. You will be given a conversation
+currently in progress, and using that as context, you must return search terms that will yield
+the most relevant information for that conversation. Please return your response as a list of strings.
+
+Here is some context to provide more guidance:
+{context}
+"""
+
+class SearchQuery(BaseModel):
+    terms: list[str]
 
 
 class DocumentStore(ABC):
@@ -86,6 +101,27 @@ class DocumentStore(ABC):
         self._export()
 
 
+    async def smart_query(self, text: str, conversation: str, context: str, k: int=5):
+        res = await self._client.responses.parse(
+            input=[
+                {'role': 'developer', 'content': KEY_TERMS_SYSTEM_MESSAGE.format(context=context)},
+                {'role': 'user', 'content': json.dumps({'conversation': conversation, 'query': text}, indent=2)}
+            ],
+            text_format=SearchQuery,
+            model="gpt-4o"
+        )
+
+        terms = res.output_parsed.terms
+
+        total_results = []
+        
+        for term in terms:
+            term_results = await self.query(term)
+            for res in term_results:
+                if res['name'] not in [r['name'] for r in total_results]:
+                    total_results.append(res)
+        return total_results
+
 
     async def query(self, text: str, k: int=5) -> list[dict]:
         """
@@ -124,3 +160,12 @@ class DocumentStore(ABC):
         (self.export_path/"documents.json").write_text(
             json.dumps(self.documents, indent=2)
         )
+
+
+    def get_docs_by_kv(self, key: str, value: str):
+        results = [
+            doc
+            for doc in self.documents.values()
+            if doc[key] == value
+        ]
+        return results

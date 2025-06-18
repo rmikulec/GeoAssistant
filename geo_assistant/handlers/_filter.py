@@ -6,6 +6,7 @@ class GeoFilter(BaseModel):
     field: str
     value: Any
     op: Literal["equal", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual", "notEqual", "contains"]
+    table: str
 
 
     def _to_cql(self):
