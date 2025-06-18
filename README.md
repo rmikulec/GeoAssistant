@@ -73,7 +73,14 @@ For rapid iteration without rebuilding the Dash container:
    pip install -r requirements.txt
    python3 -m geo_assistant.app
    ```
-3. Tail service logs:
+3. Start the React frontend with Vite:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+4. Tail service logs:
 
    ```bash
    docker-compose logs -f geo_assistant  # AI + API server
