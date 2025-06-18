@@ -133,9 +133,6 @@ class MapHandler:
                 map_layers=layers
             )
         else:
-            self.figure = px.choropleth_map(zoom=3)
-            self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-            self.figure.update_layout(map_bounds=self._global_bounds)
             self.figure.update_layout(map_style="dark")
 
         return self.figure

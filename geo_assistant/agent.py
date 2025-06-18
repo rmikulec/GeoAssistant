@@ -54,7 +54,7 @@ class GeoAgent:
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
         supplement_info: str = None,
-        use_smart_search: bool = False
+        use_smart_search: bool = True
     ):
         self.model = model
         self.use_smart_search = use_smart_search
