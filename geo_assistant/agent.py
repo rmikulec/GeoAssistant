@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 import pathlib
 import openai
@@ -92,7 +95,7 @@ class GeoAgent:
 
     async def _get_field_defs(self, message: str, k: int = 5):
         if len(self.messages)>1:
-            field_def_query += " " + self.messages[-1]['content']
+            message += " " + self.messages[-1]['content']
         field_defs = await self.field_store.query(message, k=5)
         return field_defs
 

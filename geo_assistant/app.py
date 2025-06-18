@@ -1,11 +1,10 @@
 import dash
 import logging
+import asyncio
 import pathlib
-from dash import html, dcc, Input, Output, State
+from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
-
-from geo_assistant.data_dictionary import DataDictionaryStore
 from geo_assistant.handlers import MapHandler, DataHandler
 from geo_assistant.agent import GeoAgent
 
@@ -16,13 +15,6 @@ logger = logging.getLogger(__name__)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
 
-# Setup vector store
-pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
-export_path = pathlib.Path("./pluto/field_def_index-test2")
-if export_path.exists():
-    data_dictionary = DataDictionaryStore.load(export_path)
-else:
-    data_dictionary = DataDictionaryStore.from_pdf(pdf_path, export_path, 45)
 
 # Set up geo-assistant
 agent = GeoAgent(
@@ -31,56 +23,46 @@ agent = GeoAgent(
         table_id="public.parcels"
     ),
     data_handler=DataHandler(
-        db_name="parcelsdb",
         table_name="parcels"
     ),
-    supplement_info=data_dictionary.supplement_info
 )
 
 
 app.layout = html.Div([
-    # full-screen graph
+    # full‐screen graph
     dcc.Graph(
         id="map-graph",
         figure=agent.map_handler.figure,
         style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
-        config={
-        'displayModeBar': False
-    }
+        config={'displayModeBar': False}
     ),
 
-    # fixed container for the button
+    # chat‐open button
     html.Div(
-        dbc.Button(html.I(className='fa-solid fa-comments'), id="open-chat", color="primary", size="lg"),
-        style={
-            "position": "fixed",
-            "top": "10px",
-            "right": "10px",
-            "zIndex": 1000,
-        }
+        dbc.Button(
+            dcc.Loading(
+                html.I(id="chat-btn-icon", className='fa-solid fa-comments'),
+                id="loading-chat-btn",
+                type="default",
+                color="rgba(255, 255, 255, 0.8)"
+            ),
+            id="open-chat", color="primary", size="lg", className="glass-button"
+        ),
+        style={"position": "fixed", "top": "15px", "right": "15px", "zIndex": 1000},
     ),
 
-    # the off-canvas sidebar
-dbc.Offcanvas(
-    # wrap everything in a flex‐column container that fills the height
-    html.Div(
-        [
-            # Header
-            html.H5("Chat", className="mb-3"),
+    dbc.Offcanvas(
+        html.Div([
+            html.H5("Chat", className="mb-1 text-white"),
 
-            # Chat log area (scrollable)
+            # apply our frosted-glass chat log class
             html.Div(
                 id="chat-log",
-                className="flex-grow-1 overflow-auto mb-3",
-                style={
-                    "backgroundColor": "#f8f9fa",
-                    "padding": "10px",
-                    "borderRadius": "4px",
-                    "border": "1px solid #dee2e6",
-                },
+                className="flex-grow-1 overflow-auto mb-3 glass-chat-log",
+                style={"padding": "5px", "whiteSpace": "pre-wrap", "color": "#fff"}
             ),
 
-            # Input area pinned to bottom
+            # input + send button group
             dbc.InputGroup(
                 [
                     dbc.Input(
@@ -88,75 +70,89 @@ dbc.Offcanvas(
                         placeholder="Type your message…",
                         type="text",
                         debounce=True,
+                        className="glass-input text-white"
                     ),
                     dbc.Button(
                         html.I(className="fa-solid fa-paper-plane"),
                         id="send-btn",
-                        color="primary",
+                        color="light",
                         n_clicks=0,
+                        className="glass-button"
                     ),
                 ],
-                className="mt-auto",  # pushes this group to the bottom
+                className="mt-auto",
             ),
         ],
-        style={
-            "height": "100%",             # fill Offcanvas vertically
-            "display": "flex",
-            "flexDirection": "column",
-        },
-    ),
-    id="chat-drawer",
-    title="",            # title moved into header H5
-    is_open=False,
-    placement="end",
-    style={"width": "350px"},
-)
-
+        style={"height": "100%", "display": "flex", "flexDirection": "column"}
+        ),
+        id="chat-drawer",
+        is_open=False,
+        placement="end",
+        className="glass-offcanvas",
+        style={"width": "400px", "zIndex": "1100"},
+    )
 ])
 
+# toggle offcanvas
 @app.callback(
     Output("chat-drawer", "is_open"),
     Input("open-chat", "n_clicks"),
-    State("chat-drawer", "is_open")
+    State("chat-drawer", "is_open"),
+    prevent_initial_call=True,
 )
 def toggle_chat(n, is_open):
-    print("opening")
     if n:
         return not is_open
     return is_open
 
 
 @app.callback(
-    # 1) Append to the chat log
-    Output("chat-log", "children"),
-    # 2) Clear the input field
+    Output("chat-log",   "children"),
     Output("chat-input", "value"),
-    # 3) The new figure for the graph
-    Output("map-graph", "figure"),
-    Input("send-btn", "n_clicks"),
-    State("chat-input", "value"),
-    State("chat-log", "children"),
-    prevent_initial_call=True,
+    Output("map-graph",  "figure"),
+    Output("chat-btn-icon",  "children"),   # ← new!
+    Input("send-btn",    "n_clicks"),
+    State("chat-input",  "value"),
+    State("chat-log",    "children"),
+    running=[
+        (Output("chat-input", "disabled"), True, False),
+        (Output("send-btn",    "disabled"), True, False),
+        (
+            Output("send-btn", "children"),
+            "Thinking…",  
+            html.I(className="fa-solid fa-paper-plane")
+        ),
+    ]
 )
 def send_message(n_clicks, new_message, existing_log):
     if not new_message:
         # no change if input is empty
-        return existing_log, ""
+        return existing_log, "", no_update, no_update
     
     # start from empty list if None
     log = existing_log or []
     
     # wrap each message in a div (you can customize the className/style)
-    log.append(html.Div(f"User: {new_message}", className="mb-2"))
-    field_def_query = new_message
-    if len(agent.messages)>1:
-        field_def_query += " " + agent.messages[-1]['content']
-    field_defs = data_dictionary.query(new_message, k=5)
-    ai_response = agent.chat(new_message, field_defs)
-    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+    # user bubble
+    log.append(
+        html.Div(
+            new_message,
+            className="chat-message user-message"
+        )
+    )
+
+    ai_response = asyncio.run(agent.chat(new_message))
+
+    # assistant bubble
+    log.append(
+        html.Div(
+            ai_response,
+            className="chat-message assistant-message"
+        )
+    )
     
     # clear the input after sending
-    return log, "", agent.map_handler.update_figure()
+    return log, "", agent.map_handler.update_figure(), no_update
 
 
 if __name__ == "__main__":
