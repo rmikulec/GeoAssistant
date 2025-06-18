@@ -96,6 +96,21 @@ For rapid iteration without rebuilding the Dash container:
     python3 -m geo_assistant.load_parcels
     ```
 
+
+### React Frontend
+
+A lightweight React application is provided in the `webapp` directory. It displays a fullscreen map and an optional chat drawer on the right.
+
+Run it locally with:
+
+```bash
+cd webapp
+npm install
+npm run start
+```
+
+The app will start with Vite on http://localhost:5173 by default.
+
 ## Contributing
 
 1. Fork the repository and create a feature branch.
