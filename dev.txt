@@ -78,7 +78,7 @@ cycler==0.12.1
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   matplotlib
-dash[celery]==3.0.4
+dash[celery,diskcache]==3.0.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash-bootstrap-components
@@ -88,6 +88,14 @@ debugpy==1.8.14
     # via ipykernel
 decorator==5.2.1
     # via ipython
+dill==0.4.0
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   multiprocess
+diskcache==5.6.3
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   dash
 distro==1.9.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -185,6 +193,10 @@ matplotlib-inline==0.1.7
     #   ipython
 mccabe==0.7.0
     # via flake8
+multiprocess==0.70.18
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   dash
 mypy-extensions==1.1.0
     # via black
 narwhals==1.42.1
@@ -252,7 +264,10 @@ prompt-toolkit==3.0.51
     #   click-repl
     #   ipython
 psutil==7.0.0
-    # via ipykernel
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   dash
+    #   ipykernel
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3

@@ -1,5 +1,6 @@
 dash
 dash[celery]
+dash[diskcache]
 dash-bootstrap-components
 faiss-cpu
 geopandas

@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 from pydantic import Field
 
 class DefaultConfiguration(BaseSettings):
@@ -14,6 +15,7 @@ class DefaultConfiguration(BaseSettings):
     info_store_version: str = Field(default="1.0.5")
     field_def_store_version: str = Field(default="1.0.5")
     pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
+    redis_url: Optional[str] = Field(default=None)
     # Database configuration
     db_name: str = Field(default="parcelsdb")
     db_username: str = Field(default="gisuser")

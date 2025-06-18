@@ -1,28 +1,35 @@
 import dash
 import logging
-import pathlib
-from dash import html, dcc, Input, Output, State
+import asyncio
+import os
+from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager
 import dash_bootstrap_components as dbc
 
-
-from geo_assistant.data_dictionary import DataDictionaryStore
 from geo_assistant.handlers import MapHandler, DataHandler
+from geo_assistant.config import Configuration
 from geo_assistant.agent import GeoAgent
 
 
 # Initialize Classes
 logger = logging.getLogger(__name__)
+
+
+if Configuration.redis_url:
+    # Use Redis & Celery if REDIS_URL set as an env variable
+    from celery import Celery
+    celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
+    background_callback_manager = CeleryManager(celery_app)
+
+else:
+    # Diskcache for non-production apps when developing locally
+    import diskcache
+    cache = diskcache.Cache("./cache")
+    background_callback_manager = DiskcacheManager(cache)
 # Set up app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
 
-# Setup vector store
-pdf_path = pathlib.Path("./pluto/pluto_datadictionary.pdf")
-export_path = pathlib.Path("./pluto/field_def_index-test2")
-if export_path.exists():
-    data_dictionary = DataDictionaryStore.load(export_path)
-else:
-    data_dictionary = DataDictionaryStore.from_pdf(pdf_path, export_path, 45)
+
 
 # Set up geo-assistant
 agent = GeoAgent(
@@ -31,56 +38,50 @@ agent = GeoAgent(
         table_id="public.parcels"
     ),
     data_handler=DataHandler(
-        db_name="parcelsdb",
         table_name="parcels"
     ),
-    supplement_info=data_dictionary.supplement_info
 )
 
 
 app.layout = html.Div([
-    # full-screen graph
+    # full‐screen graph
     dcc.Graph(
         id="map-graph",
         figure=agent.map_handler.figure,
         style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
-        config={
-        'displayModeBar': False
-    }
+        config={'displayModeBar': False}
     ),
 
-    # fixed container for the button
+    # chat‐open button
     html.Div(
-        dbc.Button(html.I(className='fa-solid fa-comments'), id="open-chat", color="primary", size="lg"),
-        style={
-            "position": "fixed",
-            "top": "10px",
-            "right": "10px",
-            "zIndex": 1000,
-        }
+        dbc.Button(html.I(className='fa-solid fa-comments'),
+                   id="open-chat", color="primary", size="lg"),
+        style={"position": "fixed", "top": "10px", "right": "10px", "zIndex": 1000}
     ),
 
-    # the off-canvas sidebar
-dbc.Offcanvas(
-    # wrap everything in a flex‐column container that fills the height
-    html.Div(
-        [
-            # Header
+    # offcanvas chat
+    dbc.Offcanvas(
+        html.Div([
             html.H5("Chat", className="mb-3"),
 
-            # Chat log area (scrollable)
-            html.Div(
-                id="chat-log",
-                className="flex-grow-1 overflow-auto mb-3",
-                style={
-                    "backgroundColor": "#f8f9fa",
-                    "padding": "10px",
-                    "borderRadius": "4px",
-                    "border": "1px solid #dee2e6",
-                },
+            # ← wrap the chat log in a Loading spinner
+            dcc.Loading(
+                html.Div(
+                    id="chat-log",
+                    className="flex-grow-1 overflow-auto mb-3",
+                    style={
+                        "backgroundColor": "#f8f9fa",
+                        "padding": "10px",
+                        "borderRadius": "4px",
+                        "border": "1px solid #dee2e6",
+                        "whiteSpace": "pre-wrap"
+                    }
+                ),
+                id="loading-chat",
+                type="default"
             ),
 
-            # Input area pinned to bottom
+            # input + send button
             dbc.InputGroup(
                 [
                     dbc.Input(
@@ -96,68 +97,72 @@ dbc.Offcanvas(
                         n_clicks=0,
                     ),
                 ],
-                className="mt-auto",  # pushes this group to the bottom
+                className="mt-auto",
             ),
         ],
-        style={
-            "height": "100%",             # fill Offcanvas vertically
-            "display": "flex",
-            "flexDirection": "column",
-        },
-    ),
-    id="chat-drawer",
-    title="",            # title moved into header H5
-    is_open=False,
-    placement="end",
-    style={"width": "350px"},
-)
-
+        style={"height": "100%", "display": "flex", "flexDirection": "column"}
+        ),
+        id="chat-drawer",
+        title="",
+        is_open=False,
+        placement="end",
+        style={"width": "350px"}
+    )
 ])
 
+
+# toggle offcanvas
 @app.callback(
     Output("chat-drawer", "is_open"),
     Input("open-chat", "n_clicks"),
-    State("chat-drawer", "is_open")
+    State("chat-drawer", "is_open"),
 )
 def toggle_chat(n, is_open):
-    print("opening")
     if n:
         return not is_open
     return is_open
 
 
+# background “send_message” callback
 @app.callback(
-    # 1) Append to the chat log
-    Output("chat-log", "children"),
-    # 2) Clear the input field
+    # primary outputs
+    Output("chat-log",   "children"),
     Output("chat-input", "value"),
-    # 3) The new figure for the graph
-    Output("map-graph", "figure"),
-    Input("send-btn", "n_clicks"),
-    State("chat-input", "value"),
-    State("chat-log", "children"),
-    prevent_initial_call=True,
-)
-def send_message(n_clicks, new_message, existing_log):
-    if not new_message:
-        # no change if input is empty
-        return existing_log, ""
-    
-    # start from empty list if None
-    log = existing_log or []
-    
-    # wrap each message in a div (you can customize the className/style)
-    log.append(html.Div(f"User: {new_message}", className="mb-2"))
-    field_def_query = new_message
-    if len(agent.messages)>1:
-        field_def_query += " " + agent.messages[-1]['content']
-    field_defs = data_dictionary.query(new_message, k=5)
-    ai_response = agent.chat(new_message, field_defs)
-    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
-    
-    # clear the input after sending
-    return log, "", agent.map_handler.update_figure()
+    Output("map-graph",  "figure"),
 
+    # trigger + state
+    Input("send-btn",    "n_clicks"),
+    State("chat-input",  "value"),
+    State("chat-log",    "children"),
+    State("map-graph",   "figure"),
+
+    # run in the background
+    background=True,
+    manager=background_callback_manager,
+
+    # disable inputs & show spinner text
+    running=[
+        (Output("chat-input", "disabled"), True, False),
+        (Output("send-btn",    "disabled"), True, False),
+        (Output("send-btn",    "children"),
+         "Thinking…",          # while running
+         html.I(className="fa-solid fa-paper-plane")  # when done
+        ),
+    ]
+)
+def send_message(n_clicks, message, existing_log, existing_figure):
+    # no-op if blank
+    if not message:
+        return existing_log or [], "", existing_figure
+
+    log = (existing_log or []) + [ html.Div(f"User: {message}", className="mb-2") ]
+
+    # this runs in a worker, so blocking is fine
+    ai_response = asyncio.run(agent.chat(message))
+    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+
+    new_figure = agent.map_handler.update_figure()
+    return log, "", new_figure
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8050)
