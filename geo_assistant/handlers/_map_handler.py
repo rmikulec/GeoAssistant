@@ -42,7 +42,8 @@ class MapHandler:
     
         # Key attributes for udpating the figure
         self.map_layers: dict = {}
-        self._layer_filters: dict[str, GeoFilter] = {}
+        self._layer_filters: dict[str, list[GeoFilter]] = defaultdict(list)
+        self._layer_ids: dict[str, list[str]] = defaultdict(list)
 
         # Udpate the figure once while initializing
         self.figure.update_layout(
@@ -84,6 +85,10 @@ class MapHandler:
     
 
     def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+        """
+        Private method to add a new layer to the map. Layers consist of filters and are automatically
+        split by 'table'
+        """
         sorted_filters = defaultdict(list)
         for filter_ in filters:
             sorted_filters[filter_.table].append(filter_)
@@ -103,16 +108,27 @@ class MapHandler:
                 "below": "traces" 
             }
             # Register it to the map
-            self.map_layers[f"{table}_{layer_id}"] = layer
-            self._layer_filters[f"{table}_{layer_id}"] = filters
+            table_layer_id = f"{table}_{layer_id}"
+            self.map_layers[table_layer_id] = layer
+            self._layer_ids[layer_id].append(table_layer_id)
+        # Add all filters to layer_filters dict, keeping them together
+        self._layer_filters[layer_id] = filters
     
 
     def _remove_map_layer(self, layer_id: str) -> str:
-        del self.map_layers[layer_id]
-        del self._layer_filters[layer_id]
+        """
+        Removes a layer from the map
+        """
+        for table_layer_id in self._layer_ids:
+            del self.map_layers[layer_id]
+            del self._layer_filters[layer_id]
+        del self._layer_ids[layer_id]
         return f"Layer {layer_id} removed from the map"
 
     def _reset_map(self) -> str:
+        """
+        Removes all layers on the map
+        """
         self.map_layers = {}
         self._layer_filters = {}
         return "All layers removed from map, blank map initialized"
@@ -140,6 +156,9 @@ class MapHandler:
 
     @property
     def status(self):
+        """
+        Status so far consists of a readable dict, of all the layers and their filters on the map
+        """
         layers = []
 
         for layer_id, layer in self.map_layers.items():
