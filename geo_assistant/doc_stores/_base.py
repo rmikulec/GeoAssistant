@@ -1,6 +1,7 @@
 import faiss
 import openai
 import pathlib
+import threading
 import json
 import numpy as np
 
@@ -27,6 +28,7 @@ class DocumentStore(ABC):
         embedding_model: str = Configuration.embedding_model,
         docstore_root: str = Configuration.docstore_path,
     ):
+        self._lock = threading.Lock()
         self.version = version
         self.vector_dim = vector_dim
         self.embedding_model = embedding_model
@@ -72,15 +74,16 @@ class DocumentStore(ABC):
         # Load embeddings into numpy
         embs = np.array([item.embedding for item in resp.data], dtype="float32")
 
-        # Normalize and add to FAISS in one shot
-        faiss.normalize_L2(embs)
-        self.index.add_with_ids(embs, np.array(ids, dtype="int64"))
+        with self._lock:
+            # Normalize and add to FAISS in one shot
+            faiss.normalize_L2(embs)
+            self.index.add_with_ids(embs, np.array(ids, dtype="int64"))
 
-        # Update in‐memory document map
-        for doc_id, doc in zip(ids, documents):
-            # drop the raw text if you prefer
-            meta = {k: v for k, v in doc.items() if k != text_key}
-            self.documents[doc_id] = meta
+            # Update in‐memory document map
+            for doc_id, doc in zip(ids, documents):
+                # drop the raw text if you prefer
+                meta = {k: v for k, v in doc.items() if k != text_key}
+                self.documents[doc_id] = meta
 
         # Persist both index and documents
         self._export()
@@ -97,30 +100,32 @@ class DocumentStore(ABC):
         Returns:
             list[dict]: Top k closest documents with distances
         """
-        # Embed and normalize
-        resp = await self._client.embeddings.create(
-            model=self.embedding_model,
-            input=[text]
-        )
-        vec = np.array(resp.data[0].embedding, dtype="float32").reshape(1, -1)
-        faiss.normalize_L2(vec)
+        with self._lock:
+            # Embed and normalize
+            resp = await self._client.embeddings.create(
+                model=self.embedding_model,
+                input=[text]
+            )
+            vec = np.array(resp.data[0].embedding, dtype="float32").reshape(1, -1)
+            faiss.normalize_L2(vec)
 
-        # Search the index
-        D, I = self.index.search(vec, k)
-        # Tie back up with the documents
-        out = []
-        for dist, idx in zip(D[0], I[0]):
-            doc = self.documents.get(idx, {}).copy()
-            # Add distance to the results
-            doc["distance"] = float(dist)
-            out.append(doc)
+            # Search the index
+            D, I = self.index.search(vec, k)
+            # Tie back up with the documents
+            out = []
+            for dist, idx in zip(D[0], I[0]):
+                doc = self.documents.get(idx, {}).copy()
+                # Add distance to the results
+                doc["distance"] = float(dist)
+                out.append(doc)
         return out
 
     def _export(self):
         """
         Private method to export the index and documents. Be careful when calling.
         """
-        faiss.write_index(self.index,      str(self.export_path / "index.bin"))
-        (self.export_path/"documents.json").write_text(
-            json.dumps(self.documents, indent=2)
-        )
+        with self._lock:
+            faiss.write_index(self.index,      str(self.export_path / "index.bin"))
+            (self.export_path/"documents.json").write_text(
+                json.dumps(self.documents, indent=2)
+            )

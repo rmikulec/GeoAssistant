@@ -1,4 +1,6 @@
 import requests
+import threading
+from typing import NoReturn
 from functools import cached_property
 
 from plotly.graph_objects import Figure
@@ -48,6 +50,8 @@ class MapHandler:
         self.figure.update_layout(
             map_style="dark"
         )
+
+        self._lock = threading.Lock()
 
     @cached_property
     def _tileserve_table(self):
@@ -105,22 +109,25 @@ class MapHandler:
             "color": color,
             "below": "traces" 
         }
-        # Register it to the map
-        self.map_layers[layer_id] = layer
-        self._layer_filters[layer_id] = filters
+        with self._lock:
+            # Register it to the map
+            self.map_layers[layer_id] = layer
+            self._layer_filters[layer_id] = filters
     
 
     def _remove_map_layer(self, layer_id: str) -> str:
-        del self.map_layers[layer_id]
-        del self._layer_filters[layer_id]
+        with self._lock:
+            del self.map_layers[layer_id]
+            del self._layer_filters[layer_id]
         return f"Layer {layer_id} removed from the map"
 
     def _reset_map(self) -> str:
-        self.map_layers = {}
-        self._layer_filters = {}
+        with self._lock:
+            self.map_layers = {}
+            self._layer_filters = {}
         return "All layers removed from map, blank map initialized"
 
-    def update_figure(self) ->Figure:
+    def update_figure(self) -> NoReturn:
         """
         Updates the figure depending on what layers have been added / removed since last update
 
@@ -129,35 +136,40 @@ class MapHandler:
         Returns:
             Figure: The MapHandler's map plotly figure, configured with all the correct layers
         """
-        layers = list(self.map_layers.values())
-        if layers:
-            self.figure.update_layout(
-                map_style="dark",
-                map_layers=layers
-            )
-        else:
-            self.figure = px.choropleth_map(zoom=3)
-            self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-            self.figure.update_layout(map_bounds=self._default_bounds)
-            self.figure.update_layout(map_style="dark")
+        with self._lock:
+            layers = list(self.map_layers.values())
+            if layers:
+                self.figure.update_layout(
+                    map_style="dark",
+                    map_layers=layers
+                )
+            else:
+                self.figure = px.choropleth_map(zoom=3)
+                self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+                self.figure.update_layout(map_bounds=self._default_bounds)
+                self.figure.update_layout(map_style="dark")
+    
 
-        return self.figure
+    def get_figure(self) -> Figure:
+        with self._lock:
+            return self.figure
     
 
     @property
     def status(self):
         layers = []
 
-        for layer_id, layer in self.map_layers.items():
-            filters = self._layer_filters[layer_id]
-            layers.append(
-                {
-                    "id": layer_id,
-                    "color": layer['color'],
-                    "style": layer['type'],
-                    "filters": [filter_.model_dump() for filter_ in filters]
-                }
+        with self._lock:
+            for layer_id, layer in self.map_layers.items():
+                filters = self._layer_filters[layer_id]
+                layers.append(
+                    {
+                        "id": layer_id,
+                        "color": layer['color'],
+                        "style": layer['type'],
+                        "filters": [filter_.model_dump() for filter_ in filters]
+                    }
 
-            )
+                )
         
         return layers

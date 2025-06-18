@@ -1,8 +1,12 @@
+import multiprocessing
+multiprocessing.set_start_method("spawn", force=True)
+
 import dash
 import logging
 import asyncio
+import traceback
 import os
-from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager
+from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, no_update
 import dash_bootstrap_components as dbc
 
 from geo_assistant.handlers import MapHandler, DataHandler
@@ -47,7 +51,7 @@ app.layout = html.Div([
     # full‐screen graph
     dcc.Graph(
         id="map-graph",
-        figure=agent.map_handler.figure,
+        figure=agent.map_handler.get_figure(),
         style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
         config={'displayModeBar': False}
     ),
@@ -152,17 +156,22 @@ def toggle_chat(n, is_open):
 )
 def send_message(n_clicks, message, existing_log, existing_figure):
     # no-op if blank
-    if not message:
-        return existing_log or [], "", existing_figure
+    try:
+        if not message:
+            return existing_log or [], "", existing_figure
 
-    log = (existing_log or []) + [ html.Div(f"User: {message}", className="mb-2") ]
+        log = (existing_log or []) + [ html.Div(f"User: {message}", className="mb-2") ]
 
-    # this runs in a worker, so blocking is fine
-    ai_response = asyncio.run(agent.chat(message))
-    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+        # this runs in a worker, so blocking is fine
+        ai_response = asyncio.run(agent.chat(message))
+        log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
 
-    new_figure = agent.map_handler.update_figure()
-    return log, "", new_figure
+        agent.map_handler.update_figure()
+        return log, "", agent.map_handler.get_figure()
+    except Exception as e:
+        print(traceback.format_exc())
+        # optionally return no_update so the app keeps running
+        return no_update, no_update, no_update
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050)
+    app.run(host="0.0.0.0", port=8050, debug=True)
