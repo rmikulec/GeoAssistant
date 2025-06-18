@@ -4,6 +4,10 @@
 #
 #    pip-compile dev.in
 #
+amqp==5.3.1
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   kombu
 annotated-types==0.7.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -17,12 +21,20 @@ appnope==0.1.4
     # via ipykernel
 asttokens==3.0.0
     # via stack-data
+billiard==4.2.1
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
 black==25.1.0
     # via -r dev.in
 blinker==1.9.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   flask
+celery[redis]==5.5.3
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   dash
 certifi==2025.4.26
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -39,7 +51,23 @@ click==8.2.1
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   black
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
     #   flask
+click-didyoumean==0.3.1
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
+click-plugins==1.1.1
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
+click-repl==0.3.0
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
 comm==0.2.2
     # via ipykernel
 contourpy==1.3.2
@@ -50,7 +78,7 @@ cycler==0.12.1
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   matplotlib
-dash==3.0.4
+dash[celery]==3.0.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   dash-bootstrap-components
@@ -140,6 +168,10 @@ kiwisolver==1.4.8
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   matplotlib
+kombu[redis]==5.5.4
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
 markupsafe==3.0.2
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -185,6 +217,7 @@ packaging==25.0
     #   geopandas
     #   gunicorn
     #   ipykernel
+    #   kombu
     #   matplotlib
     #   plotly
     #   pyogrio
@@ -214,7 +247,10 @@ plotly==6.1.2
 pluggy==1.6.0
     # via pytest
 prompt-toolkit==3.0.51
-    # via ipython
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   click-repl
+    #   ipython
 psutil==7.0.0
     # via ipykernel
 ptyprocess==0.7.0
@@ -262,6 +298,7 @@ pytest==8.4.0
 python-dateutil==2.9.0.post0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   celery
     #   jupyter-client
     #   matplotlib
     #   pandas
@@ -279,6 +316,11 @@ pyzmq==27.0.0
     # via
     #   ipykernel
     #   jupyter-client
+redis==5.2.1
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   dash
+    #   kombu
 requests==2.32.4
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
@@ -343,14 +385,23 @@ typing-inspection==0.4.1
 tzdata==2025.2
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   kombu
     #   pandas
 urllib3==2.4.0
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
     #   requests
     #   responses
+vine==5.1.0
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   amqp
+    #   celery
+    #   kombu
 wcwidth==0.2.13
-    # via prompt-toolkit
+    # via
+    #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt
+    #   prompt-toolkit
 werkzeug==3.0.6
     # via
     #   -r /Users/ryan/projects/paces-gis-qa/requirements.txt

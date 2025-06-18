@@ -1,4 +1,5 @@
 dash
+dash[celery]
 dash-bootstrap-components
 faiss-cpu
 geopandas

@@ -33,6 +33,18 @@ services:
     profiles:
       - dev
       - prod
+    
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    profiles:
+      - dev
+      - prod
 
   geo_assistant:
     image: python:3.13-slim
@@ -44,6 +56,8 @@ services:
       db:
         condition: service_healthy
       tileserv:
+        condition: service_started
+      redis:
         condition: service_started
     environment:
       # share docstore volume
@@ -59,3 +73,4 @@ services:
 volumes:
   pgdata:
   docstore:
+  redis_data:
