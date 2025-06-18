@@ -50,25 +50,18 @@ app.layout = html.Div([
         style={"position": "fixed", "top": "15px", "right": "15px", "zIndex": 1000},
     ),
 
-    # offcanvas chat
     dbc.Offcanvas(
         html.Div([
-            html.H5("Chat", className="mb-3"),
+            html.H5("Chat", className="mb-3 text-white"),
 
+            # apply our frosted-glass chat log class
             html.Div(
                 id="chat-log",
-                className="flex-grow-1 overflow-auto mb-3",
-                style={
-                    "backgroundColor": "#f8f9fa",
-                    "padding": "10px",
-                    "borderRadius": "4px",
-                    "border": "1px solid #dee2e6",
-                    "whiteSpace": "pre-wrap"
-                }
+                className="flex-grow-1 overflow-auto mb-3 glass-chat-log",
+                style={"padding": "10px", "whiteSpace": "pre-wrap", "color": "#fff"}
             ),
 
-
-            # input + send button
+            # input + send button group
             dbc.InputGroup(
                 [
                     dbc.Input(
@@ -76,12 +69,14 @@ app.layout = html.Div([
                         placeholder="Type your message…",
                         type="text",
                         debounce=True,
+                        className="glass-input text-gray"
                     ),
                     dbc.Button(
                         html.I(className="fa-solid fa-paper-plane"),
                         id="send-btn",
-                        color="primary",
+                        color="light",
                         n_clicks=0,
+                        className="glass-button"
                     ),
                 ],
                 className="mt-auto",
@@ -90,13 +85,12 @@ app.layout = html.Div([
         style={"height": "100%", "display": "flex", "flexDirection": "column"}
         ),
         id="chat-drawer",
-        title="",
         is_open=False,
         placement="end",
-        style={"width": "350px"}
+        className="glass-offcanvas",
+        style={"width": "350px", "zIndex": "1100"},
     )
 ])
-
 
 # toggle offcanvas
 @app.callback(
