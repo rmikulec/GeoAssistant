@@ -25,6 +25,7 @@ class MapHandler:
         """
         Private property to get the index data from the pg-tileserv server
         """
+        print(Configuration.pg_tileserv_url)
         return requests.get(
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()

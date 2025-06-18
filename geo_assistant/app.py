@@ -1,10 +1,9 @@
 import multiprocessing
-multiprocessing.set_start_method("spawn", force=True)
+multiprocessing.set_start_method("forkserver", force=True)
 
 import dash
 import logging
 import asyncio
-import traceback
 import os
 from dash import html, dcc, Input, Output, State, CeleryManager, DiskcacheManager, no_update
 import dash_bootstrap_components as dbc
@@ -23,16 +22,16 @@ if Configuration.redis_url:
     from celery import Celery
     celery_app = Celery(__name__, broker=os.environ['REDIS_URL'], backend=os.environ['REDIS_URL'])
     background_callback_manager = CeleryManager(celery_app)
-
+    print("REDIS LOADED")
 else:
     # Diskcache for non-production apps when developing locally
     import diskcache
     cache = diskcache.Cache("./cache")
     background_callback_manager = DiskcacheManager(cache)
+    print("Using DISKCACHE")
 # Set up app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
-
 
 
 # Set up geo-assistant
@@ -120,6 +119,7 @@ app.layout = html.Div([
     Output("chat-drawer", "is_open"),
     Input("open-chat", "n_clicks"),
     State("chat-drawer", "is_open"),
+    prevent_initial_call=True,
 )
 def toggle_chat(n, is_open):
     if n:
@@ -143,6 +143,8 @@ def toggle_chat(n, is_open):
     # run in the background
     background=True,
     manager=background_callback_manager,
+    prevent_initial_call=True,
+    cache_args_to_ignore=["chat-input"],
 
     # disable inputs & show spinner text
     running=[
@@ -156,22 +158,17 @@ def toggle_chat(n, is_open):
 )
 def send_message(n_clicks, message, existing_log, existing_figure):
     # no-op if blank
-    try:
-        if not message:
-            return existing_log or [], "", existing_figure
+    if not message:
+        return existing_log or [], "", existing_figure
 
-        log = (existing_log or []) + [ html.Div(f"User: {message}", className="mb-2") ]
+    log = (existing_log or []) + [ html.Div(f"User: {message}", className="mb-2") ]
 
-        # this runs in a worker, so blocking is fine
-        ai_response = asyncio.run(agent.chat(message))
-        log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
+    # this runs in a worker, so blocking is fine
+    ai_response = asyncio.run(agent.chat(message))
+    log.append(html.Div(f"GeoAssistant: {ai_response}", className="mb-2"))
 
-        agent.map_handler.update_figure()
-        return log, "", agent.map_handler.get_figure()
-    except Exception as e:
-        print(traceback.format_exc())
-        # optionally return no_update so the app keeps running
-        return no_update, no_update, no_update
+    agent.map_handler.update_figure()
+    return log, "", agent.map_handler.get_figure()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050, debug=True)
+    app.run(host="0.0.0.0", port=8050)

@@ -18,7 +18,7 @@ blinker==1.9.0
     # via flask
 celery[redis]==5.5.3
     # via dash
-certifi==2025.4.26
+certifi==2025.6.15
     # via
     #   httpcore
     #   httpx
@@ -99,7 +99,7 @@ matplotlib==3.10.3
     # via -r requirements.in
 multiprocess==0.70.18
     # via dash
-narwhals==1.42.1
+narwhals==1.43.0
     # via plotly
 nest-asyncio==1.6.0
     # via dash
@@ -112,7 +112,7 @@ numpy==2.3.0
     #   pandas
     #   pyogrio
     #   shapely
-openai==1.87.0
+openai==1.88.0
     # via -r requirements.in
 packaging==25.0
     # via
@@ -138,6 +138,8 @@ prompt-toolkit==3.0.51
     # via click-repl
 psutil==7.0.0
     # via dash
+psycopg2-binary==2.9.10
+    # via -r requirements.in
 pyarrow==20.0.0
     # via -r requirements.in
 pydantic==2.11.7

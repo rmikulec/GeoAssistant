@@ -1,3 +1,4 @@
+version: "3.9"
 services:
   db:
     image: postgis/postgis:15-3.4-alpine
@@ -5,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: gisuser
       POSTGRES_DB: parcelsdb
-      POSTGRES_HOST_AUTH_METHOD: trust     # allows connections without a password
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
     volumes:
@@ -26,14 +27,14 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://gisuser@db:5432/parcelsdb
+      TS_CORSORIGINS: "*"        # ← this line enables CORS for all origins
     ports:
       - "7800:7800"
-    command:
-      ./pg_tileserv --config /opt/pg_tileserv/pg_tileserv.toml
+    command: ./pg_tileserv --config ./config/config-pg-tileserv.toml
     profiles:
       - dev
       - prod
-    
+
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -43,7 +44,6 @@ services:
     volumes:
       - redis_data:/data
     profiles:
-      - dev
       - prod
 
   geo_assistant:
@@ -60,13 +60,40 @@ services:
       redis:
         condition: service_started
     environment:
-      # share docstore volume
+      PG_TILESERV_URL: http://tileserv:7800
+      REDIS_URL: redis://redis:6379/0
+      DB_HOST: db
       DOCSTORE_DIR: /usr/src/app/data/docstore
     ports:
       - "8050:8050"
     command: >
       sh -c "pip install --no-cache-dir -r requirements.txt &&
             gunicorn geo_assistant.app:server --bind 0.0.0.0:8050 --workers 2"
+    profiles:
+      - prod
+
+  celery_worker:
+    image: python:3.13-slim
+    container_name: geo_assistant_worker
+    working_dir: /usr/src/app
+    volumes:
+      - ./:/usr/src/app
+    depends_on:
+      redis:
+        condition: service_started
+      geo_assistant:
+        condition: service_started
+    environment:
+      PG_TILESERV_URL: http://tileserv:7800
+      REDIS_URL: redis://redis:6379/0
+      DB_HOST: db
+      DOCSTORE_DIR: /usr/src/app/data/docstore
+    # expose no ports since it's just a worker
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt &&
+            celery -A geo_assistant.app.celery_app worker
+                   --loglevel=info
+                   --pool=solo"
     profiles:
       - prod
 

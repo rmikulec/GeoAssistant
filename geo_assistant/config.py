@@ -18,6 +18,7 @@ class DefaultConfiguration(BaseSettings):
     redis_url: Optional[str] = Field(default=None)
     # Database configuration
     db_name: str = Field(default="parcelsdb")
+    db_host: str = Field(default="localhost")
     db_username: str = Field(default="gisuser")
     db_password: str = Field(default="pw")
     db_port: int = Field(default=5432)
@@ -27,7 +28,7 @@ class DefaultConfiguration(BaseSettings):
         super().__init__(**values)
         # Set the database connection URL after the initial values have been set
         if not self.db_connection_url:
-            self.db_connection_url = f"postgresql+psycopg2://{self.db_username}:{self.db_password}@localhost:{self.db_port}/{self.db_name}"
+            self.db_connection_url = f"postgresql+psycopg2://{self.db_username}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
 
 Configuration = DefaultConfiguration()

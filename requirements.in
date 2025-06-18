@@ -14,5 +14,6 @@ PyPdf2
 pyarrow
 pydantic
 pydantic_settings
+psycopg2-binary
 shapely
 sqlalchemy
