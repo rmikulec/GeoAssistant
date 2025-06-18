@@ -127,7 +127,7 @@ def toggle_chat(n, is_open):
 def send_message(n_clicks, new_message, existing_log):
     if not new_message:
         # no change if input is empty
-        return existing_log, ""
+        return existing_log, "", no_update, no_update
     
     # start from empty list if None
     log = existing_log or []
