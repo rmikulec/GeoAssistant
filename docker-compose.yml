@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgis/postgis:15-3.4-alpine
+    platform: linux/amd64
+    image: postgis/postgis:17-3.5-alpine
     container_name: postgis
     environment:
       POSTGRES_USER: gisuser
