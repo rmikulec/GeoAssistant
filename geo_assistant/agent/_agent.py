@@ -264,7 +264,6 @@ class GeoAgent:
             steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
             fields=[field['name'] for field in fields]
         )
-        print(json.dumps(DynGISModel.model_json_schema(), indent=2))
         # Query for relative info
         context = await self.info_store.query(user_message, k=5)
         # Generate the system message
