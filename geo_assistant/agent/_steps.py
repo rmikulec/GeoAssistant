@@ -52,9 +52,8 @@ class GISAnalysisStep(BaseModel):
         }
         
         # give it a distinct name so Pydantic can differentiate
-        new_name = f"{cls.__name__}Dynamic"
         return create_model(
-            new_name,
+            cls.__name__,
             __base__=cls,
             **(dynamic_fields | dynamic_list_fields)
         )
@@ -107,6 +106,36 @@ class FilterStep(SQLStep):
             __base__=cls,
             filters=(filters_union, ...)
         )
+    
+    def _execute(self, engine):
+        for f in self.filters:
+            op = f.operator.upper()
+
+            if op in ("IN", "NOT IN"):
+                vals_sql = []
+                for v in f.values:
+                    if isinstance(v, str):
+                        # first escape any single-quotes by doubling them
+                        escaped = v.replace("'", "''")
+                        # then wrap in single-quotes
+                        vals_sql.append(f"'{escaped}'")
+                    else:
+                        vals_sql.append(str(v))
+                f.values = vals_sql
+
+            elif op in ("IS NULL", "IS NOT NULL"):
+                # no value needed
+                continue
+
+            else:
+                v = f.value
+                if isinstance(v, str):
+                    escaped = v.replace("'", "''")
+                    f.value = f"'{escaped}'"
+                else:
+                    f.value = str(v)
+
+        return super()._execute(engine)
 
 class MergeStep(SQLStep):
     _type: SkipJsonSchema[Literal['merge']] = "merge"
@@ -187,7 +216,7 @@ class GISAnalysis(BaseModel):
 
         # override only the 'steps' field
         return create_model(
-            f"{cls.__name__}Dynamic",
+            __name__,
             __base__=cls,
             steps=(list[StepUnion], ...)
         )

@@ -17,7 +17,7 @@ class Aggregator(BaseModel):
     @classmethod
     def _build_aggregator(cls, fields_enum):
         return create_model(
-            f"{cls.__name__}Dynamic",
+            cls.__name__,
             __base__=cls,
             column=(fields_enum, ...)
         )
