@@ -27,3 +27,6 @@ SELECT Populate_Geometry_Columns(
 
 -- ensure pg-tileserv can see it
 GRANT SELECT ON "{{ output_table }}" TO {{ tileserv_role | default('public') }};
+
+-- now add a spatial index for fast spatial queries
+CREATE INDEX ON "{{ output_table }}" USING GIST (geometry);

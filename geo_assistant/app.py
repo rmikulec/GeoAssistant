@@ -6,7 +6,7 @@ from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
 from geo_assistant.handlers import MapHandler, DataHandler
-from geo_assistant.agent import GeoAgent
+from geo_assistant.agent._agent import GeoAgent
 
 
 # Initialize Classes

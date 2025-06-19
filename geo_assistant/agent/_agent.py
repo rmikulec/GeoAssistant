@@ -261,7 +261,7 @@ class GeoAgent:
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = GISAnalysis.build_model(
-            steps=[AggregateStep, MergeStep, BufferStep],
+            steps=[AggregateStep, MergeStep, BufferStep, FilterStep],
             fields=[field['name'] for field in fields]
         )
         # Query for relative info
@@ -285,6 +285,7 @@ class GeoAgent:
             text_format=DynGISModel
         )
         analysis_steps = res.output_parsed.steps
+        print(res.output_parsed.model_dump_json(indent=2))
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
         for step in analysis_steps:

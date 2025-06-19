@@ -8,18 +8,18 @@ FROM "{{ source_table }}"
 {% if filters %}
 WHERE
 {% for f in filters %}
-    {%- if f.operator in ['IN','NOT IN'] -%}
-    "{{ f.column }}" {{ f.operator }}
+    {%- if f.operator in ['IS NULL', 'IS NOT NULL'] -%}
+    "{{ f.column.value }}" {{ f.operator }}
+    {%- elif f.operator in ['IN', 'NOT IN'] -%}
+    "{{ f.column.value }}" {{ f.operator }}
       ({{ f.values | map('tojson') | join(', ') }})
     {%- elif f.operator == 'BETWEEN' -%}
-    "{{ f.column }}" BETWEEN
+    "{{ f.column.value }}" BETWEEN
       {{ f.range[0] | tojson }} AND {{ f.range[1] | tojson }}
-    {%- elif f.operator in ['IS NULL','IS NOT NULL'] -%}
-    "{{ f.column }}" {{ f.operator }}
     {%- else -%}
-    "{{ f.column }}" {{ f.operator }} {{ f.value | tojson }}
+    "{{ f.column.value }}" {{ f.operator }} {{ f.value | tojson }}
     {%- endif -%}
-    {{ ' AND' if not loop.last else '' }}
+    {{ " AND " if not loop.last }}
 {% endfor %}
 {% endif %};
 
@@ -30,3 +30,7 @@ SELECT Populate_Geometry_Columns(
 
 -- ensure pg-tileserv user can read it
 GRANT SELECT ON "{{ output_table }}" TO {{ tileserv_role | default('public') }};
+
+
+-- now add a spatial index for fast spatial queries
+CREATE INDEX ON "{{ output_table }}" USING GIST (geometry);

@@ -1,16 +1,35 @@
-{# templates/aggregate.sql #}
+{# templates/aggregate.sql.j2 #}
 DROP TABLE IF EXISTS "{{ output_table }}";
+
 CREATE TABLE "{{ output_table }}" AS
 SELECT
-{% for col in group_by %}
-  "{{ col.value }}"{{ "," if not loop.last }}
-{% endfor %}
-  , ST_Union("{{ geometry_column }}") AS "{{ geometry_column }}"
+{% if group_by %}
+  {%- for col in group_by %}
+  "{{ col.value }}"{{ "," }}
+  {%- endfor %}
+{% endif %}
+{# -- regular aggregators -- #}
+{% for agg in aggregators %}
+  {%- if agg.operator == 'COUNT' -%}
+  COUNT({{ "DISTINCT " if agg.distinct else "" }}{{ '"' ~ agg.column.value ~ '"' if agg.column.value != '*' else '*' }})
+  {%- else -%}
+  {{ agg.operator }}("{{ agg.column.value }}")
+  {%- endif -%}
+  AS "{{ agg.alias or (agg.operator|lower ~ '_' ~ (agg.column.value|replace('*','all'))) }}"{{ "," }}
+{%- endfor %}
+{# -- spatial aggregators -- #}
+{% for sp in spatial_aggregators %}
+  ST_{{ sp.operator }}("{{ sp.column.value }}")
+  AS "{{ sp.alias or (sp.operator|lower ~ '_' ~ sp.column.value) }}"{{ "," }}
+{%- endfor %}
+  ST_Union("{{ geometry_column }}") AS "{{ geometry_column }}"
 FROM "{{ source_table }}"
+{% if group_by %}
 GROUP BY
-{% for col in group_by %}
+  {%- for col in group_by %}
   "{{ col.value }}"{{ "," if not loop.last }}
-{% endfor %};
+  {%- endfor %}
+{% endif %};
 
 -- register the new geometry column
 SELECT Populate_Geometry_Columns(
@@ -19,3 +38,6 @@ SELECT Populate_Geometry_Columns(
 
 -- ensure pg-tileserv user can read it
 GRANT SELECT ON "{{ output_table }}" TO {{ tileserv_role | default('public') }};
+
+-- now add a spatial index for fast spatial queries
+CREATE INDEX ON "{{ output_table }}" USING GIST ("{{ geometry_column }}");

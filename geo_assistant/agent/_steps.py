@@ -5,9 +5,11 @@ from pydantic import BaseModel, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
-from geo_assistant.agent._filter import FilterItem
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
+from geo_assistant.agent._filter import SQLFilters, FilterItem
+from geo_assistant.agent._aggregator import SQLAggregators, Aggregator
+from geo_assistant.agent._spatial_aggregator import SQLSpatialAggregators, SpatialAggregator
 
 DynamicField = Type[str]
 
@@ -92,7 +94,19 @@ class FilterStep(SQLStep):
     source_table: str
     filters: list[FilterItem]
 
-
+    @classmethod
+    def _build_step_model(cls, fields_enum: type[Enum]) -> Type[Self]:
+        cls = super()._build_step_model(fields_enum=fields_enum)
+        dynamic_filters = [
+            filter_._build_filter(fields_enum=fields_enum)
+            for filter_ in SQLFilters
+        ]
+        filters_union = list[Union[tuple(dynamic_filters)]]
+        return create_model(
+            cls.__name__,
+            __base__=cls,
+            filters=(filters_union, ...)
+        )
 
 class MergeStep(SQLStep):
     _type: SkipJsonSchema[Literal['merge']] = "merge"
@@ -116,8 +130,30 @@ class MergeStep(SQLStep):
 class AggregateStep(SQLStep):
     _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
     source_table: str = Field(..., description="Table to aggregate")
+    aggregators: list[Aggregator] = Field(..., description="List of ways to aggregate columns")
+    spatial_aggregators: list[Aggregator] = Field(..., description="List of ways to aggregate geometries")
     group_by: list[DynamicField] = Field(..., description="List of columns to GROUP BY")
     output_table: str = Field(..., description="Name of the aggregated table")
+
+    @classmethod
+    def _build_step_model(cls, fields_enum: type[Enum]) -> Type[Self]:
+        cls = super()._build_step_model(fields_enum=fields_enum)
+        dynamic_aggregators = [
+            agg_._build_aggregator(fields_enum=fields_enum)
+            for agg_ in SQLAggregators
+        ]
+        dynamic_spatial_aggregators = [
+            agg_._build_aggregator(fields_enum=fields_enum)
+            for agg_ in SQLSpatialAggregators
+        ]
+        agg_union = list[Union[tuple(dynamic_aggregators)]]
+        spatial_union = list[Union[tuple(dynamic_spatial_aggregators)]]
+        return create_model(
+            cls.__name__,
+            __base__=cls,
+            aggregators=(agg_union, Field(..., description="List of ways to aggregate columns")),
+            spatial_aggregators=(spatial_union, Field(..., description="List of ways to aggregate geometries"))
+        )
 
 
 class BufferStep(SQLStep):
