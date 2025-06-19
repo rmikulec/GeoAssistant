@@ -18,6 +18,7 @@ from geo_assistant import tools
 from geo_assistant.config import Configuration
 
 from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep
+from geo_assistant.agent._sql_exec import execute_template_sql
 
 
 logger = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ class GeoAgent:
         # Setup the system message template
         system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
         # Query for relevant fields
-        field_results = await self.field_store.query(user_message, k=10)
+        field_results = await self.field_store.query(user_message, k=15)
         fields = self._verify_fields(field_results)
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
@@ -265,13 +266,14 @@ class GeoAgent:
             fields=[field['name'] for field in fields]
         )
         # Query for relative info
-        context = await self.info_store.query(user_message, k=5)
+        context = await self.info_store.query(user_message, k=10)
         # Generate the system message
         system_message = system_message_template.render(
             field_definitions=fields,
             context_info=context,
             tables=set([field['table'] for field in fields])
         )
+        print(system_message)
         # Hit openai to generate a step-by-step plan for the analysis
         res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
             input=[
@@ -288,13 +290,24 @@ class GeoAgent:
         print(res.output_parsed.model_dump_json(indent=2))
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
-        for step in analysis_steps:
-            print(f"Running {step.name}")
-            print(step.reasoning)
-            try:
+
+        tables_created = []
+
+        try:
+            for step in analysis_steps:
+                print(f"Running {step.name}")
+                print(step.reasoning)
                 step._execute(self.engine)
-            except Exception as e:
-                raise e
-        # Drop all intermediate tables
-        for step in analysis_steps[:-1]:
-            step._drop(engine=self.engine)
+                tables_created.append(step.output_table)
+        except Exception as e:
+            print(e)
+        finally:
+            # No matter what, drop all the tables but the last possible
+            if len(tables_created) > 1:
+                tables_to_drop = tables_created[:(len(analysis_steps)-1)]
+                print(f"Dropping: {tables_to_drop}")
+                execute_template_sql(
+                    engine=self.engine,
+                    template_name="drop",
+                    output_tables=tables_to_drop
+            )

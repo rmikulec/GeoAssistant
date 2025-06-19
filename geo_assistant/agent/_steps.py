@@ -26,6 +26,18 @@ def make_enum(*values: str) -> Type[Enum]:
     return Enum("Fields", members)
 
 
+GeometryType = Literal[
+    "Point",
+    "MultiPoint",
+    "LineString",
+    "MultiLineString",
+    "Polygon",
+    "MultiPolygon",
+    "GeometryCollection",
+    "Geometry"
+]
+
+
 class _GISAnalysisStep(BaseModel):
     id_: SkipJsonSchema[str] = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(description="A descriptive name for the step")
@@ -62,12 +74,14 @@ class _SQLStep(_GISAnalysisStep):
     _type: Literal["base"] = "base"
     _is_intermediate: bool = False
     output_table: str
+    target_geometry_type: GeometryType
 
     def _execute(self, engine: Engine):
         execute_template_sql(
             engine=engine,
             template_name=self._type,
             geometry_column=Configuration.geometry_column,
+            target_srid=3857,
             **self.model_dump()
         )
 
@@ -79,11 +93,11 @@ class _SQLStep(_GISAnalysisStep):
         :param table_name: Name of the table to drop (no schema).
         :param schema: Schema where the table lives (defaults to 'public').
         """
-        qualified = f'"public"."{self.output_table}"'
-        drop_sql = text(f'DROP TABLE IF EXISTS {qualified} CASCADE;')
-        # Use a transaction to ensure it commits
-        with engine.begin() as conn:
-            conn.execute(drop_sql)
+        execute_template_sql(
+            engine=engine,
+            template_name="drop",
+            output_tables=[self.output_table]
+        )
 
 
 
@@ -108,31 +122,22 @@ class _FilterStep(_SQLStep):
     
     def _execute(self, engine):
         for f in self.filters:
-            op = f.operator.upper()
+            # single‐value filters
+            if hasattr(f, "value") and isinstance(f.value, str):
+                f.value = f"'{f.value}'"
 
-            if op in ("IN", "NOT IN"):
-                vals_sql = []
-                for v in f.values:
-                    if isinstance(v, str):
-                        # first escape any single-quotes by doubling them
-                        escaped = v.replace("'", "''")
-                        # then wrap in single-quotes
-                        vals_sql.append(f"'{escaped}'")
-                    else:
-                        vals_sql.append(str(v))
-                f.values = vals_sql
+            # list‐value filters (IN / NOT IN)
+            if hasattr(f, "values"):
+                f.values = [
+                    f"'{v}'" if isinstance(v, str) else v
+                    for v in f.values
+                ]
 
-            elif op in ("IS NULL", "IS NOT NULL"):
-                # no value needed
-                continue
-
-            else:
-                v = f.value
-                if isinstance(v, str):
-                    escaped = v.replace("'", "''")
-                    f.value = f"'{escaped}'"
-                else:
-                    f.value = str(v)
+            # BETWEEN filters
+            if hasattr(f, "lower") and isinstance(f.lower, str):
+                f.lower = f"'{f.lower}'"
+            if hasattr(f, "upper") and isinstance(f.upper, str):
+                f.upper = f"'{f.upper}'"
 
         return super()._execute(engine)
 

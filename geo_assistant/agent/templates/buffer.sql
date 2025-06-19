@@ -18,13 +18,17 @@ ALTER TABLE "{{ output_table }}"
 ALTER TABLE "{{ output_table }}"
   RENAME COLUMN geom_buf TO "{{ geometry_column }}";
 
--- fix the column's typmod to MULTIPOLYGON,3857
-ALTER TABLE "{{ output_table }}"
-  ALTER COLUMN "{{ geometry_column }}"
-    TYPE geometry(MultiPolygon,3857)
-    USING "{{ geometry_column }}"::geometry(MultiPolygon,3857);
 
--- register the new geometry column
+-- === Geometry normalization ===
+ALTER TABLE public.{{ output_table }}
+  ALTER COLUMN {{ geometry_column }}
+  TYPE Geometry({{ target_geometry_type }}, {{ target_srid }})
+  USING
+    ST_Multi(
+      ST_Transform({{ geometry_column }}, {{ target_srid }})
+    );
+
+-- re-register now that type & SRID are fixed
 SELECT Populate_Geometry_Columns(
   'public.{{ output_table }}'::regclass
 );
@@ -35,3 +39,4 @@ GRANT SELECT ON "{{ output_table }}" TO {{ tileserv_role | default('public') }};
 
 -- now add a spatial index for fast spatial queries
 CREATE INDEX ON "{{ output_table }}" USING GIST (geometry);
+ANALYZE "{{ output_table }}"

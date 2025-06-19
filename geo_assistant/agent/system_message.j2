@@ -13,7 +13,9 @@ You are an expert GIS analyst and spatial database architect with deep experienc
 -- Field Definitions --
 You have access to the following table fields:
 {% for field_def in field_definitions -%}
-- **{{ field_def.table }}.{{ field_def.name }}** ({{ field_def.type }}): {{ field_def.description }}
+**{{ field_def.table }}.{{ field_def.name }}** ({{ field_def.format }})
+{{ field_def.description | indent(2)}}
+
 {% endfor %}
 
 -- Context Information --
@@ -29,9 +31,11 @@ Plan and output a detailed, multi-step GIS analysis pipeline.
 - `MergeStep`
 - `AggregateStep`
 - `BufferStep`
+- `FilterStep`
 
-### Important Consideration
+### Important Considerations
 When selecting columns from an `output_table` of a previous step, be aware that available columns might have changed (e.g., through aggregation or merging). Carefully confirm that you are referencing only columns available from that specific `output_table`.
+When building filters, make sure the 'value' type matches that of the field definition
 
 -- Available Tables --
 When referencing another table, ONLY these values and the `output_table` of a previous step can be used:

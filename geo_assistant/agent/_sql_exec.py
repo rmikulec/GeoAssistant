@@ -30,7 +30,6 @@ def execute_template_sql(
     )
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
-    print(sql)
     # 3) Execute
     # If it's an Engine, open a connection + transaction
     if isinstance(engine, Engine):
