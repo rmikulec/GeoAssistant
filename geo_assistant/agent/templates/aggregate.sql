@@ -18,11 +18,12 @@ SELECT
   AS "{{ agg.alias or (agg.operator|lower ~ '_' ~ (agg.column.value|replace('*','all'))) }}"{{ "," }}
 {%- endfor %}
 {# -- spatial aggregators -- #}
-{% for sp in spatial_aggregators %}
-  ST_{{ sp.operator }}("{{ sp.column.value }}")
-  AS "{{ sp.alias or (sp.operator|lower ~ '_' ~ sp.column.value) }}"{{ "," }}
-{%- endfor %}
+{% if spatial_aggregator %}
+  ST_{{ sp.operator }}("{{ geometry_column }}")
+  AS "{{ geometry_column }}"
+{% else %}
   ST_Union("{{ geometry_column }}") AS "{{ geometry_column }}"
+{% endif %}
 FROM "{{ source_table }}"
 {% if group_by %}
 GROUP BY

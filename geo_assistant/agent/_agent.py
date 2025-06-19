@@ -17,7 +17,7 @@ from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
-from geo_assistant.agent._steps import GISAnalysis, AggregateStep, FilterStep, MergeStep, BufferStep
+from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep
 
 
 logger = logging.getLogger(__name__)
@@ -260,10 +260,11 @@ class GeoAgent:
         fields = self._verify_fields(field_results)
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
-        DynGISModel = GISAnalysis.build_model(
-            steps=[AggregateStep, MergeStep, BufferStep, FilterStep],
+        DynGISModel = _GISAnalysis.build_model(
+            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
             fields=[field['name'] for field in fields]
         )
+        print(json.dumps(DynGISModel.model_json_schema(), indent=2))
         # Query for relative info
         context = await self.info_store.query(user_message, k=5)
         # Generate the system message
@@ -273,7 +274,7 @@ class GeoAgent:
             tables=set([field['table'] for field in fields])
         )
         # Hit openai to generate a step-by-step plan for the analysis
-        res: ParsedResponse[GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+        res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
             input=[
                 {'role': 'system', 'content': system_message},
                 {'role': 'user', 'content': user_message}

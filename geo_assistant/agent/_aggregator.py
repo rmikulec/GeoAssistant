@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict, create_model
 # all supported aggregation functions
 AggregatorOperator = Literal['COUNT', 'SUM', 'AVG', 'MIN', 'MAX']
 
-class Aggregator(BaseModel):
+class _Aggregator(BaseModel):
     operator: AggregatorOperator = Field(..., description="Aggregation function")
     alias:   str | None            = Field(
         None,
@@ -17,13 +17,13 @@ class Aggregator(BaseModel):
     @classmethod
     def _build_aggregator(cls, fields_enum):
         return create_model(
-            cls.__name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             column=(fields_enum, ...)
         )
 
 
-class CountAggregator(Aggregator):
+class _CountAggregator(_Aggregator):
     operator: Literal['COUNT']
     column:   str | Literal['*']    = Field(
         '*',
@@ -35,31 +35,31 @@ class CountAggregator(Aggregator):
     )
 
 
-class SumAggregator(Aggregator):
+class _SumAggregator(_Aggregator):
     operator: Literal['SUM']
     column:   str                   = Field(..., description="Column to sum")
 
 
-class AvgAggregator(Aggregator):
+class _AvgAggregator(_Aggregator):
     operator: Literal['AVG']
     column:   str                   = Field(..., description="Column to average")
 
 
-class MinAggregator(Aggregator):
+class _MinAggregator(_Aggregator):
     operator: Literal['MIN']
     column:   str                   = Field(..., description="Column to take minimum of")
 
 
-class MaxAggregator(Aggregator):
+class _MaxAggregator(_Aggregator):
     operator: Literal['MAX']
     column:   str                   = Field(..., description="Column to take maximum of")
 
 
 # The union type you’ll actually use:
-SQLAggregators: list[Aggregator] = [
-    CountAggregator,
-    SumAggregator,
-    AvgAggregator,
-    MinAggregator,
-    MaxAggregator,
+SQLAggregators: list[_Aggregator] = [
+    _CountAggregator,
+    _SumAggregator,
+    _AvgAggregator,
+    _MinAggregator,
+    _MaxAggregator,
 ]

@@ -7,9 +7,9 @@ from sqlalchemy import Engine, text
 
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
-from geo_assistant.agent._filter import SQLFilters, FilterItem
-from geo_assistant.agent._aggregator import SQLAggregators, Aggregator
-from geo_assistant.agent._spatial_aggregator import SQLSpatialAggregators, SpatialAggregator
+from geo_assistant.agent._filter import SQLFilters, _FilterItem
+from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
+from geo_assistant.agent._spatial_aggregator import SpatialAggregator
 
 DynamicField = Type[str]
 
@@ -27,7 +27,7 @@ def make_enum(*values: str) -> Type[Enum]:
     return Enum("Fields", members)
 
 
-class GISAnalysisStep(BaseModel):
+class _GISAnalysisStep(BaseModel):
     id_: SkipJsonSchema[str] = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(description="A descriptive name for the step")
     reasoning: str = Field(description="Description of what the step does, and why it is needed")
@@ -53,13 +53,13 @@ class GISAnalysisStep(BaseModel):
         
         # give it a distinct name so Pydantic can differentiate
         return create_model(
-            cls.__name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             **(dynamic_fields | dynamic_list_fields)
         )
 
 
-class SQLStep(GISAnalysisStep):
+class _SQLStep(_GISAnalysisStep):
     _type: Literal["base"] = "base"
     _is_intermediate: bool = False
     output_table: str
@@ -88,10 +88,10 @@ class SQLStep(GISAnalysisStep):
 
 
 
-class FilterStep(SQLStep):
+class _FilterStep(_SQLStep):
     _type: Literal['filter'] = "filter"
     source_table: str
-    filters: list[FilterItem]
+    filters: list[_FilterItem]
 
     @classmethod
     def _build_step_model(cls, fields_enum: type[Enum]) -> Type[Self]:
@@ -102,7 +102,7 @@ class FilterStep(SQLStep):
         ]
         filters_union = list[Union[tuple(dynamic_filters)]]
         return create_model(
-            cls.__name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             filters=(filters_union, ...)
         )
@@ -137,7 +137,7 @@ class FilterStep(SQLStep):
 
         return super()._execute(engine)
 
-class MergeStep(SQLStep):
+class _MergeStep(_SQLStep):
     _type: SkipJsonSchema[Literal['merge']] = "merge"
     left_table: str = Field(..., description="Left-hand table")
     right_table: str = Field(..., description="Right-hand table")
@@ -156,11 +156,11 @@ class MergeStep(SQLStep):
 
 
 
-class AggregateStep(SQLStep):
+class _AggregateStep(_SQLStep):
     _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
     source_table: str = Field(..., description="Table to aggregate")
-    aggregators: list[Aggregator] = Field(..., description="List of ways to aggregate columns")
-    spatial_aggregators: list[Aggregator] = Field(..., description="List of ways to aggregate geometries")
+    aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
+    spatial_aggregator: Optional[SpatialAggregator] = Field(default=None, description="List of ways to aggregate geometries")
     group_by: list[DynamicField] = Field(..., description="List of columns to GROUP BY")
     output_table: str = Field(..., description="Name of the aggregated table")
 
@@ -171,21 +171,16 @@ class AggregateStep(SQLStep):
             agg_._build_aggregator(fields_enum=fields_enum)
             for agg_ in SQLAggregators
         ]
-        dynamic_spatial_aggregators = [
-            agg_._build_aggregator(fields_enum=fields_enum)
-            for agg_ in SQLSpatialAggregators
-        ]
+        
         agg_union = list[Union[tuple(dynamic_aggregators)]]
-        spatial_union = list[Union[tuple(dynamic_spatial_aggregators)]]
         return create_model(
-            cls.__name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             aggregators=(agg_union, Field(..., description="List of ways to aggregate columns")),
-            spatial_aggregators=(spatial_union, Field(..., description="List of ways to aggregate geometries"))
         )
 
 
-class BufferStep(SQLStep):
+class _BufferStep(_SQLStep):
     _type: SkipJsonSchema[Literal['buffer']] = "buffer"
     source_table: str = Field(..., description="Table whose geometries to buffer")
     buffer_distance: float = Field(..., description="Distance to buffer")
@@ -197,10 +192,10 @@ class BufferStep(SQLStep):
 
 
 
-class GISAnalysis(BaseModel):
+class _GISAnalysis(BaseModel):
 
     @classmethod
-    def build_model(cls, steps: list[Type[SQLStep]], fields: list[str]) -> Type["GISAnalysis"]:
+    def build_model(cls, steps: list[Type[_SQLStep]], fields: list[str]) -> Type["_GISAnalysis"]:
         """
         Returns a new GISAnalysis subclass where each of the step models
         (AggregateStep, MergeStep) has had its DynamicField replaced.
@@ -216,7 +211,7 @@ class GISAnalysis(BaseModel):
 
         # override only the 'steps' field
         return create_model(
-            __name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             steps=(list[StepUnion], ...)
         )

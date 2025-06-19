@@ -11,7 +11,7 @@ Operator = Literal[
     'IS NULL', 'IS NOT NULL'
 ]
 
-class FilterItem(BaseModel):
+class _FilterItem(BaseModel):
     column: str = Field(..., description="Column name to filter")
     operator: Operator = Field(..., description="Comparison operator")
 
@@ -22,40 +22,40 @@ class FilterItem(BaseModel):
     @classmethod
     def _build_filter(cls, fields_enum):
         return create_model(
-            cls.__name__,
+            cls.__name__.removeprefix('_'),
             __base__=cls,
             column=(fields_enum, ...)
         )
 
 
-class ValueFilter(FilterItem):
+class _ValueFilter(_FilterItem):
     operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE']
     value: Union[str, int, float] = Field(
         ..., description="Single value for comparisons"
     )
 
 
-class ListFilter(FilterItem):
+class _ListFilter(_FilterItem):
     operator: Literal['IN', 'NOT IN']
     values: List[Union[str, int, float]] = Field(
         ..., description="List of values for IN / NOT IN"
     )
 
 
-class BetweenFilter(FilterItem):
+class _BetweenFilter(_FilterItem):
     operator: Literal['BETWEEN']
     lower: Union[str, int, float]
     upper: Union[str, int, float]
 
 
-class NullFilter(FilterItem):
+class _NullFilter(_FilterItem):
     operator: Literal['IS NULL', 'IS NOT NULL']
     # no extra fields allowed
 
 
-SQLFilters: list[FilterItem] = [
-    ValueFilter,
-    ListFilter,
-    BetweenFilter,
-    NullFilter,
+SQLFilters: list[_FilterItem] = [
+    _ValueFilter,
+    _ListFilter,
+    _BetweenFilter,
+    _NullFilter,
 ]
