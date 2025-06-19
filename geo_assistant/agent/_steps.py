@@ -9,7 +9,6 @@ from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
-from geo_assistant.agent._spatial_aggregator import SpatialAggregator
 
 DynamicField = Type[str]
 
@@ -160,7 +159,14 @@ class _AggregateStep(_SQLStep):
     _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
     source_table: str = Field(..., description="Table to aggregate")
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
-    spatial_aggregator: Optional[SpatialAggregator] = Field(default=None, description="List of ways to aggregate geometries")
+    spatial_aggregator: Optional[Literal[
+    'COLLECT',      # ST_Collect
+    'UNION',        # ST_Union
+    'CENTROID',     # ST_Centroid
+    'EXTENT',       # ST_Extent
+    'ENVELOPE',     # ST_Envelope
+    'CONVEXHULL'    # ST_ConvexHull
+]] = Field(default=None, description="List of ways to aggregate geometries")
     group_by: list[DynamicField] = Field(..., description="List of columns to GROUP BY")
     output_table: str = Field(..., description="Name of the aggregated table")
 

@@ -19,7 +19,7 @@ SELECT
 {%- endfor %}
 {# -- spatial aggregators -- #}
 {% if spatial_aggregator %}
-  ST_{{ sp.operator }}("{{ geometry_column }}")
+  ST_{{ spatial_aggregator }}("{{ geometry_column }}")
   AS "{{ geometry_column }}"
 {% else %}
   ST_Union("{{ geometry_column }}") AS "{{ geometry_column }}"
@@ -27,6 +27,7 @@ SELECT
 FROM "{{ source_table }}"
 {% if group_by %}
 GROUP BY
+  "geometry",
   {%- for col in group_by %}
   "{{ col.value }}"{{ "," if not loop.last }}
   {%- endfor %}
