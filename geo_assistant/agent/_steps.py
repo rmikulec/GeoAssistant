@@ -73,6 +73,7 @@ class _GISAnalysisStep(BaseModel):
 class _SQLStep(_GISAnalysisStep):
     _type: Literal["base"] = "base"
     _is_intermediate: bool = False
+    select: list[DynamicField]
     output_table: str
     target_geometry_type: GeometryType
 

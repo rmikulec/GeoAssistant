@@ -23,6 +23,7 @@ class DefaultConfiguration(BaseSettings):
     
     #Other
     geometry_column: str = Field(default="geometry")
+    srid: int = Field(default=3857)
 
     def __init__(self, **values):
         super().__init__(**values)

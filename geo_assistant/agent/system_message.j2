@@ -34,6 +34,7 @@ Plan and output a detailed, multi-step GIS analysis pipeline.
 - `FilterStep`
 
 ### Important Considerations
+Make sure that columns needed in step i are selected in step i-1 (meaning that each steps always have the right columns available)
 When selecting columns from an `output_table` of a previous step, be aware that available columns might have changed (e.g., through aggregation or merging). Carefully confirm that you are referencing only columns available from that specific `output_table`.
 When building filters, make sure the 'value' type matches that of the field definition
 

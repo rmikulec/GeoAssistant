@@ -10,7 +10,7 @@ from openai.types.responses import ParsedResponse
 from collections import defaultdict
 from typing import Callable, Any
 from jinja2 import Template
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
 from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
@@ -244,8 +244,92 @@ class GeoAgent:
                         )
 
         return updated_results
+    
+    def _normalize_geometry(
+        self,
+        table: str,
+        geometry_column: str = Configuration.geometry_column,
+        srid: int = Configuration.srid
+    ) -> None:
+        """
+        Scans the specified table for existing geometry subtypes, selects an
+        appropriate Multi* typmod (or GeometryCollection), and normalizes the
+        geometry column so that all rows share the same type and SRID.
 
-    async def run_analysis(self, user_message: str):
+        Parameters:
+        - engine: SQLAlchemy Engine connected to your PostGIS database
+        - table: Full table name, e.g. 'schema.table' or 'table'
+        - geometry_column: Name of the geometry column to normalize
+        - srid: Target SRID (default: 3857 for Web Mercator)
+        """
+        def choose_typmod(types: set[str]) -> str:
+            poly = {'POLYGON', 'MULTIPOLYGON'}
+            line = {'LINESTRING', 'MULTILINESTRING'}
+            point = {'POINT', 'MULTIPOINT'}
+            if types <= poly:
+                return 'MultiPolygon'
+            if types <= line:
+                return 'MultiLineString'
+            if types <= point:
+                return 'MultiPoint'
+            return 'GeometryCollection'
+
+        with self.engine.begin() as conn:
+            # 1) Gather distinct geometry types
+            result = conn.execute(
+                text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
+            )
+            geom_types = {row[0] for row in result}
+            # 2) Choose the target typmod
+            typmod = choose_typmod(geom_types)
+            print(typmod)
+
+            execute_template_sql(
+                engine=self.engine,
+                template_name="normalize",
+                table=table,
+                geometry_column=geometry_column,
+                typmod=typmod,
+                srid=srid
+            )
+
+
+    def _postprocess_table(
+        self,
+        table: str,
+        geometry_column: str = Configuration.geometry_column,
+        srid: int = Configuration.srid
+    ):
+        """
+        After CTAS, normalize the geom column, register it,
+        then grant/select, add GIST index, and analyze.
+        """
+        qualified = f"public.{table}"
+
+        # 1) normalize + register
+        print("Normalizing")
+        #self._normalize_geometry(qualified, geometry_column, srid)
+
+        # 2) grant, index, analyze
+        with self.engine.begin() as conn:
+            print("grant to public")
+            conn.execute(
+                text(f"GRANT SELECT ON {qualified} TO public")
+            )
+            print("creating index")
+            conn.execute(
+                text(
+                    f'CREATE INDEX IF NOT EXISTS {table}_geometry_gist_idx ON "{table}" USING GIST (geometry);'
+
+                )
+            )
+            print("analyze")
+            conn.execute(
+                text(f'ANALYZE "{table}"')
+            )
+
+
+    async def run_analysis(self, user_message: str, _debug_path: str = None):
         """
         Runs an analysis given a user message. This is a more time consuming process than 'chat',
         as it forces the agent to *think* and plan steps, then executes sql to create tables for
@@ -254,40 +338,53 @@ class GeoAgent:
         Args:
             - user_message(str): The question or statement from the user detailing the analysis
         """
-        # Setup the system message template
-        system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
-        # Query for relevant fields
-        field_results = await self.field_store.query(user_message, k=15)
-        fields = self._verify_fields(field_results)
-        # Create a new Analysis Model with those fields as Enums (This forces the model to only
-        #   use valid fields)
-        DynGISModel = _GISAnalysis.build_model(
-            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
-            fields=[field['name'] for field in fields]
-        )
-        # Query for relative info
-        context = await self.info_store.query(user_message, k=10)
-        # Generate the system message
-        system_message = system_message_template.render(
-            field_definitions=fields,
-            context_info=context,
-            tables=set([field['table'] for field in fields])
-        )
-        print(system_message)
-        # Hit openai to generate a step-by-step plan for the analysis
-        res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
-            input=[
-                {'role': 'system', 'content': system_message},
-                {'role': 'user', 'content': user_message}
-            ],
-            model="o4-mini",
-            reasoning={
-                "effort":"high",
-            },
-            text_format=DynGISModel
-        )
-        analysis_steps = res.output_parsed.steps
-        print(res.output_parsed.model_dump_json(indent=2))
+        if _debug_path:
+            fields = [
+                "BldgFront", "BldgDepth", "ZoneDist3", "SUB_1"
+            ]
+            DynGISModel = _GISAnalysis.build_model(
+                steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
+                fields=fields
+            )
+            analysis_steps = DynGISModel.model_validate(
+                json.load(open(_debug_path, "r"))
+            ).steps
+        else:
+            # Setup the system message template
+            system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
+            # Query for relevant fields
+            field_results = await self.field_store.query(user_message, k=15)
+            fields = self._verify_fields(field_results)
+            # Create a new Analysis Model with those fields as Enums (This forces the model to only
+            #   use valid fields)
+            DynGISModel = _GISAnalysis.build_model(
+                steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
+                fields=[field['name'] for field in fields]
+            )
+            # Query for relative info
+            context = await self.info_store.query(user_message, k=10)
+            # Generate the system message
+            system_message = system_message_template.render(
+                field_definitions=fields,
+                context_info=context,
+                tables=set([field['table'] for field in fields])
+            )
+            print(system_message)
+
+            # Hit openai to generate a step-by-step plan for the analysis
+            res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+                input=[
+                    {'role': 'system', 'content': system_message},
+                    {'role': 'user', 'content': user_message}
+                ],
+                model="o4-mini",
+                reasoning={
+                    "effort":"high",
+                },
+                text_format=DynGISModel
+            )
+            analysis_steps = res.output_parsed.steps
+            print(res.output_parsed.model_dump_json(indent=2))
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
 
@@ -298,9 +395,11 @@ class GeoAgent:
                 print(f"Running {step.name}")
                 print(step.reasoning)
                 step._execute(self.engine)
+                print("postprocessing...")
+                self._postprocess_table(step.output_table)
                 tables_created.append(step.output_table)
         except Exception as e:
-            print(e)
+            raise e
         finally:
             # No matter what, drop all the tables but the last possible
             if len(tables_created) > 1:
