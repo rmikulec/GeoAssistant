@@ -77,7 +77,7 @@ class _SQLStep(_GISAnalysisStep):
     output_table: str
 
     def _execute(self, engine: Engine):
-        execute_template_sql(
+        return execute_template_sql(
             engine=engine,
             template_name=self._type,
             geometry_column=Configuration.geometry_column,
@@ -121,17 +121,17 @@ class _FilterStep(_SQLStep):
             filters=(filters_union, ...)
         )
     
-    def _execute(self, engine):
+    def _execute(self, engine: Engine = None):
         for f in self.filters:
             # single‐value filters
             if hasattr(f, "value") and isinstance(f.value, str):
                 f.value = f"'{f.value}'"
 
             # list‐value filters (IN / NOT IN)
-            if hasattr(f, "values"):
-                f.values = [
+            if hasattr(f, "value_list"):
+                f.value_list = [
                     f"'{v}'" if isinstance(v, str) else v
-                    for v in f.values
+                    for v in f.value_list
                 ]
 
             # BETWEEN filters

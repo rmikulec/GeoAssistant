@@ -307,8 +307,8 @@ class GeoAgent:
         qualified = f'"public"."{table}"'
 
         # 1) normalize + register
-        print("Normalizing")
-        self._normalize_geometry(qualified, geometry_column, srid)
+        #print("Normalizing")
+        #self._normalize_geometry(qualified, geometry_column, srid)
 
         # 2) grant, index, analyze
         with self.engine.begin() as conn:

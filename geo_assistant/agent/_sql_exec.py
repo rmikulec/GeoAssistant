@@ -8,8 +8,8 @@ from jinja2 import Template
 TEMPATE_PATH = pathlib.Path(__file__).resolve().parent / "templates"
 
 def execute_template_sql(
-    engine: Engine | Connection,
     template_name: str,
+    engine: Engine | Connection = None,
     *args: Any,
     **kwargs: Any
 ) -> None:
@@ -31,6 +31,9 @@ def execute_template_sql(
     print(kwargs)
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
+    if engine is None:
+        print(sql)
+        return sql
     # 3) Execute
     # If it's an Engine, open a connection + transaction
     if isinstance(engine, Engine):

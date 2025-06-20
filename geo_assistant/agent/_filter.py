@@ -37,7 +37,7 @@ class _ValueFilter(_FilterItem):
 
 class _ListFilter(_FilterItem):
     operator: Literal['IN', 'NOT IN']
-    values: List[Union[str, int, float]] = Field(
+    value_list: List[Union[str, int, float]] = Field(
         ..., description="List of values for IN / NOT IN"
     )
 
