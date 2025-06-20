@@ -8,4 +8,4 @@ ALTER TABLE {{ table }}
      ))::Geometry({{ typmod }},{{ srid }});
 
 -- Re-register for pg-tileserv
-SELECT Populate_Geometry_Columns('{{ table }}'::regclass);
+SELECT Populate_Geometry_Columns({{ table }}::regclass);
