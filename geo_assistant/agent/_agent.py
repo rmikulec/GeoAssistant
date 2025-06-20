@@ -7,7 +7,6 @@ import openai
 import json
 
 from openai.types.responses import ParsedResponse
-from collections import defaultdict
 from typing import Callable, Any
 from jinja2 import Template
 from sqlalchemy import Engine, text
@@ -239,93 +238,37 @@ class GeoAgent:
                         updated_results.append(
                             {
                                 "name": property['name'],
-                                **field_result
+                                **temp
                             }
                         )
 
         return updated_results
     
-    def _normalize_geometry(
-        self,
-        table: str,
-        geometry_column: str = Configuration.geometry_column,
-        srid: int = Configuration.srid
-    ) -> None:
-        """
-        Scans the specified table for existing geometry subtypes, selects an
-        appropriate Multi* typmod (or GeometryCollection), and normalizes the
-        geometry column so that all rows share the same type and SRID.
-
-        Parameters:
-        - engine: SQLAlchemy Engine connected to your PostGIS database
-        - table: Full table name, e.g. 'schema.table' or 'table'
-        - geometry_column: Name of the geometry column to normalize
-        - srid: Target SRID (default: 3857 for Web Mercator)
-        """
-        def choose_typmod(types: set[str]) -> str:
-            poly = {'POLYGON', 'MULTIPOLYGON'}
-            line = {'LINESTRING', 'MULTILINESTRING'}
-            point = {'POINT', 'MULTIPOINT'}
-            if types <= poly:
-                return 'MultiPolygon'
-            if types <= line:
-                return 'MultiLineString'
-            if types <= point:
-                return 'MultiPoint'
-            return 'GeometryCollection'
-
-        with self.engine.begin() as conn:
-            # 1) Gather distinct geometry types
-            result = conn.execute(
-                text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
-            )
-            geom_types = {row[0] for row in result}
-            # 2) Choose the target typmod
-            typmod = choose_typmod(geom_types)
-            print(typmod)
-
-            execute_template_sql(
-                engine=self.engine,
-                template_name="normalize",
-                table=table,
-                geometry_column=geometry_column,
-                typmod=typmod,
-                srid=srid
-            )
-
 
     def _postprocess_table(
         self,
         table: str,
-        geometry_column: str = Configuration.geometry_column,
-        srid: int = Configuration.srid
     ):
         """
         After CTAS, normalize the geom column, register it,
         then grant/select, add GIST index, and analyze.
         """
-        qualified = f'"public"."{table}"'
-
-        # 1) normalize + register
-        #print("Normalizing")
-        #self._normalize_geometry(qualified, geometry_column, srid)
 
         # 2) grant, index, analyze
         with self.engine.begin() as conn:
-            print("grant to public")
-            conn.execute(
-                text(f"GRANT SELECT ON {qualified} TO public")
-            )
-            print("creating index")
-            conn.execute(
-                text(
-                    f'CREATE INDEX IF NOT EXISTS {table}_geometry_gist_idx ON "{table}" USING GIST (geometry);'
-
+            query = text(
+                (
+                    "SELECT Populate_Geometry_Columns("
+                    f"'public.{table}'::regclass"
+                    ");"
                 )
             )
-            print("analyze")
             conn.execute(
-                text(f'ANALYZE "{table}"')
+                query
+            )
+            print("grant to public")
+            conn.execute(
+                text(f"GRANT SELECT ON public.{table} TO public")
             )
 
 
@@ -339,12 +282,11 @@ class GeoAgent:
             - user_message(str): The question or statement from the user detailing the analysis
         """
         if _debug_path:
-            fields = [
-                "BldgFront", "BldgDepth", "ZoneDist3", "SUB_1"
-            ]
+            fields = self.field_store.documents.values()
+            fields = self._verify_fields(field_results=fields)
             DynGISModel = _GISAnalysis.build_model(
                 steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
-                fields=fields
+                fields=[field['name'] for field in fields]
             )
             analysis_steps = DynGISModel.model_validate(
                 json.load(open(_debug_path, "r"))
@@ -395,9 +337,9 @@ class GeoAgent:
                 print(f"Running {step.name}")
                 print(step.reasoning)
                 step._execute(self.engine)
-                print("postprocessing...")
-                self._postprocess_table(step.output_table)
                 tables_created.append(step.output_table)
+
+            self._postprocess_table(tables_created[-1])
         except Exception as e:
             raise e
         finally:

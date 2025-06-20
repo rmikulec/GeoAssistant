@@ -6,7 +6,10 @@ SELECT
 {%- for col in select_columns %}
   "{{ col.value }}",
 {%- endfor %}
-  "r"."geometry"
+  ST_SetSRID(
+    ST_Transform(l."{{ geometry_column }}", {{ srid }}),
+    {{ srid }}
+  )::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
 FROM "{{ left_table }}" AS l
 JOIN "{{ right_table }}" AS r
 ON

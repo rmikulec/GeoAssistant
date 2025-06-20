@@ -12,6 +12,7 @@ from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
 
 DynamicField = Type[str]
 
+
 def make_enum(*values: str) -> Type[Enum]:
     """
     Dynamically constructs an Enum subclass.
@@ -74,14 +75,76 @@ class _SQLStep(_GISAnalysisStep):
     _type: Literal["base"] = "base"
     _is_intermediate: bool = False
     select: list[DynamicField]
-    output_table: str
+    output_table: str = Field(..., description="Name of table being created")
+
+    def _get_geometry_type(
+        self,
+        engine: Engine,
+        geometry_column: str = Configuration.geometry_column,
+    ) -> None:
+        """
+        Scans the specified table for existing geometry subtypes, selects an
+        appropriate Multi* typmod (or GeometryCollection), and normalizes the
+        geometry column so that all rows share the same type and SRID.
+
+        Parameters:
+        - engine: SQLAlchemy Engine connected to your PostGIS database
+        - table: Full table name, e.g. 'schema.table' or 'table'
+        - geometry_column: Name of the geometry column to normalize
+        - srid: Target SRID (default: 3857 for Web Mercator)
+        """
+        tables = []
+        for name, f in self.__class__.model_fields.items():
+            if getattr(f, "json_schema_extra"):
+                if f.json_schema_extra.get("is_table", False):
+                    tables.append(getattr(self, name))
+
+        def choose_typmod(types: set[str]) -> str:
+            poly = {'POLYGON', 'MULTIPOLYGON'}
+            line = {'LINESTRING', 'MULTILINESTRING'}
+            point = {'POINT', 'MULTIPOINT'}
+            if types <= poly:
+                return 'MultiPolygon'
+            if types <= line:
+                return 'MultiLineString'
+            if types <= point:
+                return 'MultiPoint'
+            return 'GeometryCollection'
+
+        with engine.begin() as conn:
+            # 1) Gather distinct geometry types
+            results = [
+                conn.execute(
+                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
+                )
+                for table in tables
+            ]
+            geom_types = {row[0] for result in results for row in result}
+            # 2) Choose the target typmod
+            return choose_typmod(geom_types)
+
+    def _create_spatial_index(self, engine: Engine, table: str):
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    f'CREATE INDEX IF NOT EXISTS "public".{table}_geometry_gist_idx ON "public"."{table}" USING GIST (geometry);'
+
+                )
+            )
+            print("analyze")
+            conn.execute(
+                text(f'ANALYZE "{table}"')
+            )
 
     def _execute(self, engine: Engine):
-        return execute_template_sql(
+        geometry_type = self._get_geometry_type(engine)
+
+        execute_template_sql(
             engine=engine,
             template_name=self._type,
             geometry_column=Configuration.geometry_column,
-            target_srid=3857,
+            srid=3857,
+            gtype=geometry_type,
             select_columns=self.select,
             **self.model_dump(exclude=['select', '_type', '_is_intermediate'])
         )
@@ -100,11 +163,12 @@ class _SQLStep(_GISAnalysisStep):
             output_tables=[self.output_table]
         )
 
+    
 
 
 class _FilterStep(_SQLStep):
     _type: Literal['filter'] = "filter"
-    source_table: str
+    source_table: str = Field(..., is_table=True)
     filters: list[_FilterItem]
 
     @classmethod
@@ -144,8 +208,8 @@ class _FilterStep(_SQLStep):
 
 class _MergeStep(_SQLStep):
     _type: SkipJsonSchema[Literal['merge']] = "merge"
-    left_table: str = Field(..., description="Left-hand table")
-    right_table: str = Field(..., description="Right-hand table")
+    left_table: str = Field(..., is_table=True)
+    right_table: str = Field(..., is_table=True)
     spatial_predicate: Literal['intersects','contains','within','dwithin'] = Field(
         ..., description="ST_<predicate> or DWithin"
     )
@@ -157,13 +221,11 @@ class _MergeStep(_SQLStep):
         'left',
         description="Which geometry column to keep in the output"
     )
-    output_table: str = Field(..., description="Name of the new, merged table")
-
 
 
 class _AggregateStep(_SQLStep):
     _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
-    source_table: str = Field(..., description="Table to aggregate")
+    source_table: str = Field(..., is_table=True)
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
     spatial_aggregator: Optional[Literal[
     'COLLECT',      # ST_Collect
@@ -194,13 +256,12 @@ class _AggregateStep(_SQLStep):
 
 class _BufferStep(_SQLStep):
     _type: SkipJsonSchema[Literal['buffer']] = "buffer"
-    source_table: str = Field(..., description="Table whose geometries to buffer")
+    source_table: str = Field(..., is_table=True)
     buffer_distance: float = Field(..., description="Distance to buffer")
     buffer_unit: Literal['meters','kilometers'] = Field(
         'meters',
         description="Unit for the buffer distance. MUST be greater than 1. A buffer of 0 will result in an empty polygon"
     )
-    output_table: str = Field(..., description="Name of the buffered output table")
 
 
 
