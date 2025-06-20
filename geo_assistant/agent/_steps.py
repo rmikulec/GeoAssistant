@@ -75,7 +75,6 @@ class _SQLStep(_GISAnalysisStep):
     _is_intermediate: bool = False
     select: list[DynamicField]
     output_table: str
-    target_geometry_type: GeometryType
 
     def _execute(self, engine: Engine):
         execute_template_sql(
@@ -83,7 +82,8 @@ class _SQLStep(_GISAnalysisStep):
             template_name=self._type,
             geometry_column=Configuration.geometry_column,
             target_srid=3857,
-            **self.model_dump()
+            select_columns=self.select,
+            **self.model_dump(exclude=['select', '_type', '_is_intermediate'])
         )
 
     def _drop(self, engine: Engine) -> None:

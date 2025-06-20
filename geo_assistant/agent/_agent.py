@@ -304,11 +304,11 @@ class GeoAgent:
         After CTAS, normalize the geom column, register it,
         then grant/select, add GIST index, and analyze.
         """
-        qualified = f"public.{table}"
+        qualified = f'"public"."{table}"'
 
         # 1) normalize + register
         print("Normalizing")
-        #self._normalize_geometry(qualified, geometry_column, srid)
+        self._normalize_geometry(qualified, geometry_column, srid)
 
         # 2) grant, index, analyze
         with self.engine.begin() as conn:
