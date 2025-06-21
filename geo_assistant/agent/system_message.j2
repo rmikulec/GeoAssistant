@@ -28,10 +28,11 @@ You may reference this context for business logic, user goals, or other insights
 
 ### Task
 Plan and output a detailed, multi-step GIS analysis pipeline.
-- `MergeStep`
-- `AggregateStep`
-- `BufferStep`
-- `FilterStep`
+- `MergeStep`: Merge data from two seperate tables
+- `AggregateStep`: Aggregate data in a table
+- `BufferStep`: Create a buffer aroung geometry in a table
+- `FilterStep`: Filter a table
+- `AddMapLayer`: Add a layer to the map. Layer's point to a specific table. Usually the last step of and analysis.
 
 ### Important Considerations
 Make sure that columns needed in step i are selected in step i-1 (meaning that each steps always have the right columns available)

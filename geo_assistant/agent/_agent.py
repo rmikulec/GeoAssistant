@@ -16,7 +16,7 @@ from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
-from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep
+from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer, _SQLStep
 from geo_assistant.agent._sql_exec import execute_template_sql
 
 
@@ -92,6 +92,7 @@ class GeoAgent:
             "add_map_layer":    self.map_handler._add_map_layer,
             "remove_map_layer": self.map_handler._remove_map_layer,
             "reset_map":        self.map_handler._reset_map,
+            "run_analysis":     self.run_analysis
         }
 
 
@@ -156,7 +157,8 @@ class GeoAgent:
         tool_defs = [
             tools._build_add_layer_def(field_defs),
             tools._build_remove_layer_def(self.map_handler),
-            tools._build_reset_def()
+            tools._build_reset_def(),
+            tools._build_run_analysis()
         ]
 
         res = await self.client.responses.create(
@@ -202,6 +204,8 @@ class GeoAgent:
                     tool_response = f"{self.data_handler.filter_count(filters)} parcels found"
                 except Exception as e:
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
+            elif tool_call.name == "run_analysis":
+                tool_response = await self.run_analysis(**kwargs)
             else:
                 try:
                     tool_response = self.tools[tool_call.name](**kwargs)
@@ -272,61 +276,50 @@ class GeoAgent:
             )
 
 
-    async def run_analysis(self, user_message: str, _debug_path: str = None):
+    async def run_analysis(self, query: str):
         """
         Runs an analysis given a user message. This is a more time consuming process than 'chat',
         as it forces the agent to *think* and plan steps, then executes sql to create tables for
         the analysis
 
         Args:
-            - user_message(str): The question or statement from the user detailing the analysis
+            - query(str): Text descibing what the analysis should accomplish
         """
-        if _debug_path:
-            fields = self.field_store.documents.values()
-            fields = self._verify_fields(field_results=fields)
-            DynGISModel = _GISAnalysis.build_model(
-                steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
-                fields=[field['name'] for field in fields]
-            )
-            analysis_steps = DynGISModel.model_validate(
-                json.load(open(_debug_path, "r"))
-            ).steps
-        else:
-            # Setup the system message template
-            system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
-            # Query for relevant fields
-            field_results = await self.field_store.query(user_message, k=15)
-            fields = self._verify_fields(field_results)
-            # Create a new Analysis Model with those fields as Enums (This forces the model to only
-            #   use valid fields)
-            DynGISModel = _GISAnalysis.build_model(
-                steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
-                fields=[field['name'] for field in fields]
-            )
-            # Query for relative info
-            context = await self.info_store.query(user_message, k=10)
-            # Generate the system message
-            system_message = system_message_template.render(
-                field_definitions=fields,
-                context_info=context,
-                tables=set([field['table'] for field in fields])
-            )
-            print(system_message)
+        # Setup the system message template
+        system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
+        # Query for relevant fields
+        field_results = await self.field_store.query(query, k=15)
+        fields = self._verify_fields(field_results)
+        # Create a new Analysis Model with those fields as Enums (This forces the model to only
+        #   use valid fields)
+        DynGISModel = _GISAnalysis.build_model(
+            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
+            fields=[field['name'] for field in fields]
+        )
+        # Query for relative info
+        context = await self.info_store.query(query, k=10)
+        # Generate the system message
+        system_message = system_message_template.render(
+            field_definitions=fields,
+            context_info=context,
+            tables=set([field['table'] for field in fields])
+        )
+        print(system_message)
 
-            # Hit openai to generate a step-by-step plan for the analysis
-            res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
-                input=[
-                    {'role': 'system', 'content': system_message},
-                    {'role': 'user', 'content': user_message}
-                ],
-                model="o4-mini",
-                reasoning={
-                    "effort":"high",
-                },
-                text_format=DynGISModel
-            )
-            analysis_steps = res.output_parsed.steps
-            print(res.output_parsed.model_dump_json(indent=2))
+        # Hit openai to generate a step-by-step plan for the analysis
+        res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+            input=[
+                {'role': 'system', 'content': system_message},
+                {'role': 'user', 'content': query}
+            ],
+            model="o4-mini",
+            reasoning={
+                "effort":"high",
+            },
+            text_format=DynGISModel
+        )
+        analysis_steps = res.output_parsed.steps
+        print(res.output_parsed.model_dump_json(indent=2))
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
 
@@ -336,8 +329,16 @@ class GeoAgent:
             for step in analysis_steps:
                 print(f"Running {step.name}")
                 print(step.reasoning)
-                step._execute(self.engine)
-                tables_created.append(step.output_table)
+
+                if isinstance(step, _SQLStep):
+                    step._execute(self.engine)
+                    tables_created.append(step.output_table)
+                elif isinstance(step, _AddMapLayer):
+                    self.map_handler._add_map_layer(
+                        layer_id=step.layer_id,
+                        color=step.color,
+                        filters=step.fi
+                    )
 
             self._postprocess_table(tables_created[-1])
         except Exception as e:
@@ -352,3 +353,9 @@ class GeoAgent:
                     template_name="drop",
                     output_tables=tables_to_drop
             )
+                
+        return (
+            f"GIS Analysis complete. Final table created: {analysis_steps[-1].output_table}"
+            f"Table description:"
+            f"{analysis_steps[-1].model_dump_json(indent=2)}"
+        )

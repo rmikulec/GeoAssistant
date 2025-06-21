@@ -1,6 +1,6 @@
 from typing import Union, List
 from typing_extensions import Literal
-from pydantic import BaseModel, ConfigDict, Field,  create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 # our shared literal of all operators
 Operator = Literal[
@@ -11,6 +11,13 @@ Operator = Literal[
     'IS NULL', 'IS NOT NULL'
 ]
 
+def _quote(val: Union[str, int, float]) -> str:
+    if isinstance(val, str):
+        # escape single quotes for CQL
+        escaped = val.replace("'", "''")
+        return f"'{escaped}'"
+    return str(val)
+
 class _FilterItem(BaseModel):
     column: str = Field(..., description="Column name to filter")
     operator: Operator = Field(..., description="Comparison operator")
@@ -18,6 +25,9 @@ class _FilterItem(BaseModel):
     # enable discriminated union on `operator`
     model_config = ConfigDict(discriminator='operator')
 
+    def to_cql(self) -> str:
+        """Fallback for filters without extra data"""
+        return f"{self.column} {self.operator}"
 
     @classmethod
     def _build_filter(cls, fields_enum):
@@ -27,13 +37,14 @@ class _FilterItem(BaseModel):
             column=(fields_enum, ...)
         )
 
-
 class _ValueFilter(_FilterItem):
     operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE']
     value: Union[str, int, float] = Field(
         ..., description="Single value for comparisons"
     )
 
+    def to_cql(self) -> str:
+        return f"{self.column} {self.operator} {_quote(self.value)}"
 
 class _ListFilter(_FilterItem):
     operator: Literal['IN', 'NOT IN']
@@ -41,19 +52,29 @@ class _ListFilter(_FilterItem):
         ..., description="List of values for IN / NOT IN"
     )
 
+    def to_cql(self) -> str:
+        items = ", ".join(_quote(v) for v in self.value_list)
+        return f"{self.column} {self.operator} ({items})"
 
 class _BetweenFilter(_FilterItem):
     operator: Literal['BETWEEN']
     lower: Union[str, int, float]
     upper: Union[str, int, float]
 
+    def to_cql(self) -> str:
+        return (
+            f"{self.column} BETWEEN "
+            f"{_quote(self.lower)} AND {_quote(self.upper)}"
+        )
 
 class _NullFilter(_FilterItem):
     operator: Literal['IS NULL', 'IS NOT NULL']
-    # no extra fields allowed
 
+    def to_cql(self) -> str:
+        return f"{self.column} {self.operator}"
 
-SQLFilters: list[_FilterItem] = [
+# List of allowed filter types
+SQLFilters: list[type[_FilterItem]] = [
     _ValueFilter,
     _ListFilter,
     _BetweenFilter,

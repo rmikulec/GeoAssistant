@@ -264,6 +264,27 @@ class _BufferStep(_SQLStep):
     )
 
 
+class _AddMapLayer(_GISAnalysisStep):
+    _type: SkipJsonSchema[Literal["addLayer"]] = "addLayer"
+    source_table: str
+    layer_id: str = Field(description="The id of the new map layer")
+    color: str = Field(description="Hex value of the color of the geometries")
+    filters: list[_FilterStep]
+
+    @classmethod
+    def _build_step_model(cls, fields_enum: type[Enum]) -> Type[Self]:
+        cls = super()._build_step_model(fields_enum=fields_enum)
+        dynamic_filters = [
+            filter_._build_filter(fields_enum=fields_enum)
+            for filter_ in SQLFilters
+        ]
+        filters_union = list[Union[tuple(dynamic_filters)]]
+        return create_model(
+            cls.__name__.removeprefix('_'),
+            __base__=cls,
+            filters=(filters_union, ...)
+        )
+
 
 class _GISAnalysis(BaseModel):
 

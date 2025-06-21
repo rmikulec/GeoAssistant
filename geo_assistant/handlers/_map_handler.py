@@ -28,13 +28,7 @@ class MapHandler:
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
 
-    def __init__(self, tables: list[str]):
-        for table_id in tables:
-            if table_id not in self._tileserv_index:
-                raise InvalidTileservTableID(table_id)
-
-        self.tables = tables
-
+    def __init__(self):
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)
         self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
@@ -50,18 +44,14 @@ class MapHandler:
             map_style="dark"
         )
 
-    @cached_property
-    def _tables_meta(self):
+    def _get_table_metadata(self, table):
         """
         The direct json data for the table from pg-tileserv
         """
-        return {
-            table: requests.get(
-                f"{Configuration.pg_tileserv_url}/{table}.json"
-            ).json()
-            for table in self.tables
-        }
-    
+        return requests.get(
+            f"{Configuration.pg_tileserv_url}/{table}.json"
+        ).json()
+
     def _get_base_tileurl(self, table_id: str):
         """
         Base tile url to be used as a source for vector layers
@@ -84,7 +74,7 @@ class MapHandler:
         }
     
 
-    def _add_map_layer(self, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+    def _add_map_layer(self, table: str, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
         """
         Private method to add a new layer to the map. Layers consist of filters and are automatically
         split by 'table'
