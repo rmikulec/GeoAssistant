@@ -14,6 +14,7 @@ class DefaultConfiguration(BaseSettings):
     field_def_store_version: str = Field(default="1.0.9")
     info_store_version: str = Field(default="1.0.8")
     pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
+    default_table: str = Field(default="pluto")
     # Database configuration
     db_name: str = Field(default="parcelsdb")
     db_username: str = Field(default="gisuser")

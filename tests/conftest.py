@@ -24,7 +24,7 @@ def index_fixture():
 
 @pytest.fixture
 def table_fixture():
-    return load_json("public.parcels.json")
+    return load_json("public.pluto.json")
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def mock_tileserv():
     and /index.json, returning the contents of tests/fixtures/.
     """
     with responses.RequestsMock(assert_all_requests_are_fired=False) as rsps:
-        for name in ("public.parcels.json", "index.json"):
+        for name in ("public.pluto.json", "index.json"):
             path = FIXTURE_DIR / name
             rsps.add(
                 method=responses.GET,

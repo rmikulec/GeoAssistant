@@ -1,7 +1,7 @@
 {
-  "id": "public.parcels",
+  "id": "public.pluto",
   "schema": "public",
-  "name": "parcels",
+  "name": "pluto",
   "properties": [
     {
       "name": "Borough",

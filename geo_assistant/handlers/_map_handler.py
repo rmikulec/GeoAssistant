@@ -28,50 +28,58 @@ class MapHandler:
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
 
-    def __init__(self):
-        # Create the figure and adjust the bounds and margins
-        self.figure = px.choropleth_map(zoom=3)
-        self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        self.figure.update_layout(map_bounds=self._global_bounds)
-    
+    def __init__(self, default_table: str = Configuration.default_table):
         # Key attributes for udpating the figure
         self.map_layers: dict = {}
         self._layer_filters: dict[str, list[GeoFilter]] = defaultdict(list)
         self._layer_ids: dict[str, list[str]] = defaultdict(list)
+        self._active_table: str = "public." + default_table
+    
+        # Create the figure and adjust the bounds and margins
+        self.figure = px.choropleth_map(zoom=3)
+        self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        self.figure.update_layout(map_bounds=self._global_bounds)
 
         # Udpate the figure once while initializing
         self.figure.update_layout(
             map_style="dark"
         )
 
-    def _get_table_metadata(self, table):
+    def _get_table_metadata(self, table_id: str):
         """
         The direct json data for the table from pg-tileserv
         """
-        return requests.get(
-            f"{Configuration.pg_tileserv_url}/{table}.json"
-        ).json()
+        try:
+            return requests.get(
+                f"{Configuration.pg_tileserv_url}/{table_id}.json"
+            ).json()
+        except requests.ConnectionError:
+            raise InvalidTileservTableID(table_id=table_id)
+
 
     def _get_base_tileurl(self, table_id: str):
         """
         Base tile url to be used as a source for vector layers
         """
-        return self._tables_meta[table_id]['tileurl']+"?columns%20%3D%20%27BBL%27"
+        return self._get_table_metadata(table_id)['tileurl']+"?columns%20%3D%20%27BBL%27"
 
     @property
     def _global_bounds(self):
-        # union the extents of all tables
-        w_list, s_list, e_list, n_list = [], [], [], []
-        for meta in self._tables_meta.values():
-            w, s, e, n = meta["bounds"]
-            w_list.append(w); s_list.append(s)
-            e_list.append(e); n_list.append(n)
-        return {
-            "west": min(w_list),
-            "south": min(s_list),
-            "east":  max(e_list),
-            "north": max(n_list),
-        }
+        if self._active_table:
+            bounds = self._get_table_metadata(self._active_table)['bounds']
+            return {
+                "west": bounds[0],
+                "south": bounds[1],
+                "east":  bounds[2],
+                "north": bounds[3],
+            }
+        else:
+            return {
+                "west": -90,
+                "south": -180,
+                "east":  90,
+                "north": 180,
+            }
     
 
     def _add_map_layer(self, table: str, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
@@ -142,7 +150,6 @@ class MapHandler:
             self.figure.update_layout(map_style="dark")
 
         return self.figure
-    
 
     @property
     def status(self):
