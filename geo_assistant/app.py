@@ -2,22 +2,26 @@ import dash
 import logging
 import asyncio
 import pathlib
+from sqlalchemy import create_engine
 from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
 from geo_assistant.handlers import MapHandler, DataHandler
-from geo_assistant.agent import GeoAgent
+from geo_assistant.agent._agent import GeoAgent
+from geo_assistant.config import Configuration
 
 
 # Initialize Classes
 logger = logging.getLogger(__name__)
 # Set up app
+engine = create_engine(url=Configuration.db_connection_url)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
 
 
 # Set up geo-assistant
 agent = GeoAgent(
+    engine=engine,
     map_handler=MapHandler(
         tables=[
             "public.transmission",

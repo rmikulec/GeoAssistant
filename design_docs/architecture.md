@@ -40,8 +40,9 @@ More information can be found on the [Github Page](https://github.com/CrunchyDat
 
 This is the main application that carries the core logic. This application is split into several key components, including (not limited to for simplicity):
   - `DashApp`: Frontend application that accepts data from user, displays the map, and displays the chat log
-  - `DataDictionaryStore`: Stores all the data parsed from a data dictionary (only supports pdfs for now), and creates a faiss index to search field definitions
-  - `GeoAgent`: Holds the core logic for calling OpenAI SDK, routing tool calls, and managing messages
+  - `FieldDefinitionStore`: Vector store of field definitions parsed from the PLUTO data dictionary. Used to dynamically build map-filter tools.
+  - `SupplementalInfoStore`: Vector store for any additional appendix or lookup-table information to provide extra context for the model.
+  - `GeoAgent`: Holds the core logic for calling OpenAI SDK, routing tool calls, managing messages and orchestrating `run_analysis` workflows.
   - `MapHandler`: Manages the plotly map object by adding *layers* and updating the figured with those. Directly interacts with `pg-tileserv`
   - `DataHandler`: Wrapper class to easily query the PostGIS database
 
@@ -49,35 +50,85 @@ This is the main application that carries the core logic. This application is sp
 Below is a quick sequence diagram on how these systems interact
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background": "#ffffff",        /* make the canvas white */
+    "sequenceNumberColor": "#999"   /* keep your custom sequence-number color */
+  }
+}}%%
 sequenceDiagram
-  box Gray UserFacing
+  %% Define colored swimlanes
+  box "User Facing" #D6EAF8
     actor User
-    participant DashApp
+    participant DashApp as "Dash App"
   end
 
-  box Gray AgentPipeline
-    participant DataDictionaryStore
+  box "Agent Pipeline" #AED6F1
+    participant FieldDefStore as "Field Definition Store"
+    participant SuppInfoStore as "Supplemental Info Store"
     participant GeoAgent
-    participant MapHandler
-    participant DataHandler
+    participant MapHandler as "Map Handler"
+    participant DataHandler as "Data Handler"
   end
 
-  box Gray ExternalServices
+  box "External Services" #85C1E9
     participant OpenAI
   end
 
+  %% Main flow with activations
   User->>DashApp: User Message
-  DataDictionaryStore->>GeoAgent: Supplies Relevant Information for System Message
-  DashApp->>DataDictionaryStore: Queries with User Message
-  DataDictionaryStore->>GeoAgent: Relevant Field Definitions to Create Tools
-  GeoAgent->>OpenAI: Queries with Tools and User Message
-  OpenAI->>GeoAgent: Response with Potential Tool Calls
-  loop Every OpenAI Tool Call:
-    GeoAgent->>MapHandler: Updates Map based on Tool Call
-    GeoAgent->>DataHandler: Queries for Relevant Information
-    DataHandler->>GeoAgent: Updates with Relevant Information for User
+  activate DashApp
+
+  GeoAgent->>FieldDefStore: Query for field definitions
+  activate FieldDefStore
+  FieldDefStore-->>GeoAgent: Relevant Field Definitions
+  deactivate FieldDefStore
+
+  GeoAgent->>SuppInfoStore: Query for supplemental info
+  activate SuppInfoStore
+  SuppInfoStore-->>GeoAgent: Contextual Information
+  deactivate SuppInfoStore
+
+  deactivate DashApp
+  DashApp->>GeoAgent: Forward message, definitions & context
+  activate GeoAgent
+
+  GeoAgent->>OpenAI: Queries with tools, context, and user message
+  activate OpenAI
+  OpenAI-->>GeoAgent: Response with potential tool calls
+  deactivate OpenAI
+
+  loop Every OpenAI Tool Call
+    alt run_analysis called
+      GeoAgent->>OpenAI: Plan analysis steps
+      activate OpenAI
+      OpenAI-->>GeoAgent: Analysis plan
+      deactivate OpenAI
+
+      loop Every Analysis Step
+        GeoAgent->>DataHandler: Create analysis tables
+        activate DataHandler
+        DataHandler-->>GeoAgent: Table created
+        deactivate DataHandler
+      end
+
+    else other tool calls
+      GeoAgent->>MapHandler: Updates map based on tool call
+      activate MapHandler
+      MapHandler-->>GeoAgent: Map updated
+      deactivate MapHandler
+
+      GeoAgent->>DataHandler: Query for relevant information
+      activate DataHandler
+      DataHandler-->>GeoAgent: Info for user
+      deactivate DataHandler
+    end
   end
-  GeoAgent->>DashApp: Updated Map
-  GeoAgent->>DashApp: AI Response based on updates (if any)
-  DashApp->>User: Display Map and new Message
+
+  GeoAgent->>DashApp: Send updated map
+  GeoAgent->>DashApp: Send AI response
+  deactivate GeoAgent
+
+  DashApp->>User: Display map and new message
 ```

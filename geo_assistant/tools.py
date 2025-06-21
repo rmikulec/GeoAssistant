@@ -65,3 +65,26 @@ def _build_reset_def() -> dict:
         "description":"Reset the map (remove all layers)",
         "parameters":{"type":"object","properties":{}, "required":[]}
     }
+
+
+def _build_run_analysis() -> dict:
+    return {
+        "type": "function",
+        "name": "run_analysis",
+        "description": (
+            "Runs a multi-step GIS analysis given a user query. "
+            "The agent will plan out aggregation, merge, buffer, and filter steps, "
+            "execute the corresponding SQL to create intermediate tables, "
+            "and return the final result."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Text describing what the analysis should accomplish"
+                }
+            },
+            "required": ["query"]
+        }
+    }
