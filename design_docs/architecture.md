@@ -50,7 +50,13 @@ This is the main application that carries the core logic. This application is sp
 Below is a quick sequence diagram on how these systems interact
 
 ```mermaid
-%%{init: { "theme": "base", "themeVariables": { "sequenceNumberColor": "#999" }}}%%
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background": "#ffffff",        /* make the canvas white */
+    "sequenceNumberColor": "#999"   /* keep your custom sequence-number color */
+  }
+}}%%
 sequenceDiagram
   %% Define colored swimlanes
   box "User Facing" #D6EAF8
