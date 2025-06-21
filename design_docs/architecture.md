@@ -50,41 +50,79 @@ This is the main application that carries the core logic. This application is sp
 Below is a quick sequence diagram on how these systems interact
 
 ```mermaid
+%%{init: { "theme": "base", "themeVariables": { "sequenceNumberColor": "#999" }}}%%
 sequenceDiagram
-  box Gray UserFacing
+  %% Define colored swimlanes
+  box "User Facing" #D6EAF8
     actor User
-    participant DashApp
+    participant DashApp as "Dash App"
   end
 
-  box Gray AgentPipeline
-    participant FieldDefinitionStore
-    participant SupplementalInfoStore
+  box "Agent Pipeline" #AED6F1
+    participant FieldDefStore as "Field Definition Store"
+    participant SuppInfoStore as "Supplemental Info Store"
     participant GeoAgent
-    participant MapHandler
-    participant DataHandler
+    participant MapHandler as "Map Handler"
+    participant DataHandler as "Data Handler"
   end
 
-  box Gray ExternalServices
+  box "External Services" #85C1E9
     participant OpenAI
   end
 
+  %% Main flow with activations
   User->>DashApp: User Message
-  DashApp->>FieldDefinitionStore: Query for field definitions
-  DashApp->>SupplementalInfoStore: Query for supplemental info
-  FieldDefinitionStore->>GeoAgent: Relevant Field Definitions
-  SupplementalInfoStore->>GeoAgent: Contextual Information
-  GeoAgent->>OpenAI: Queries with Tools, Context, and User Message
-  OpenAI->>GeoAgent: Response with Potential Tool Calls
-  alt run_analysis called
-    GeoAgent->>DataHandler: Execute Analysis Steps
-    GeoAgent->>MapHandler: Update Map Layers
+  activate DashApp
+
+  GeoAgent->>FieldDefStore: Query for field definitions
+  activate FieldDefStore
+  FieldDefStore-->>GeoAgent: Relevant Field Definitions
+  deactivate FieldDefStore
+
+  GeoAgent->>SuppInfoStore: Query for supplemental info
+  activate SuppInfoStore
+  SuppInfoStore-->>GeoAgent: Contextual Information
+  deactivate SuppInfoStore
+
+  deactivate DashApp
+  DashApp->>GeoAgent: Forward message, definitions & context
+  activate GeoAgent
+
+  GeoAgent->>OpenAI: Queries with tools, context, and user message
+  activate OpenAI
+  OpenAI-->>GeoAgent: Response with potential tool calls
+  deactivate OpenAI
+
+  loop Every OpenAI Tool Call
+    alt run_analysis called
+      GeoAgent->>OpenAI: Plan analysis steps
+      activate OpenAI
+      OpenAI-->>GeoAgent: Analysis plan
+      deactivate OpenAI
+
+      loop Every Analysis Step
+        GeoAgent->>DataHandler: Create analysis tables
+        activate DataHandler
+        DataHandler-->>GeoAgent: Table created
+        deactivate DataHandler
+      end
+
+    else other tool calls
+      GeoAgent->>MapHandler: Updates map based on tool call
+      activate MapHandler
+      MapHandler-->>GeoAgent: Map updated
+      deactivate MapHandler
+
+      GeoAgent->>DataHandler: Query for relevant information
+      activate DataHandler
+      DataHandler-->>GeoAgent: Info for user
+      deactivate DataHandler
+    end
   end
-  loop Every OpenAI Tool Call:
-    GeoAgent->>MapHandler: Updates Map based on Tool Call
-    GeoAgent->>DataHandler: Queries for Relevant Information
-    DataHandler->>GeoAgent: Updates with Relevant Information for User
-  end
-  GeoAgent->>DashApp: Updated Map
-  GeoAgent->>DashApp: AI Response based on updates (if any)
-  DashApp->>User: Display Map and new Message
+
+  GeoAgent->>DashApp: Send updated map
+  GeoAgent->>DashApp: Send AI response
+  deactivate GeoAgent
+
+  DashApp->>User: Display map and new message
 ```
