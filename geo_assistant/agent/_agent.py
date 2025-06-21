@@ -152,10 +152,13 @@ class GeoAgent:
         context_search = await self.info_store.query(user_message, k=3)
         context = "\n".join([result['markdown'] for result in context_search])
         field_defs = await self._get_field_defs(user_message, context)
-
+        tables = list(self.map_handler._tileserv_index.keys())
 
         tool_defs = [
-            tools._build_add_layer_def(field_defs),
+            tools._build_add_layer_def(
+                tables=tables,
+                field_defs=field_defs
+            ),
             tools._build_remove_layer_def(self.map_handler),
             tools._build_reset_def(),
             tools._build_run_analysis()
@@ -176,7 +179,7 @@ class GeoAgent:
             made_tool_calls = True
             kwargs = json.loads(tool_call.arguments)
 
-            print(f"Calling {tool_call.name} with filters: {kwargs}")
+            print(f"Calling {tool_call.name} with kwargs: {kwargs}")
 
 
             if tool_call.name == "add_map_layer":   
@@ -184,7 +187,7 @@ class GeoAgent:
                 filter_names = [
                     name
                     for name in kwargs.keys()
-                    if name not in ['layer_id', 'color', 'style']
+                    if name not in ['layer_id', 'color', 'style', 'table']
                 ]
                 filters = []
                 for filter_name in filter_names:
@@ -205,7 +208,7 @@ class GeoAgent:
                 except Exception as e:
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             elif tool_call.name == "run_analysis":
-                tool_response = await self.run_analysis(**kwargs)
+                res = await self.run_analysis(**kwargs)
             else:
                 try:
                     tool_response = self.tools[tool_call.name](**kwargs)
@@ -293,7 +296,7 @@ class GeoAgent:
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
-            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep],
+            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _AddMapLayer],
             fields=[field['name'] for field in fields]
         )
         # Query for relative info
@@ -335,6 +338,7 @@ class GeoAgent:
                     tables_created.append(step.output_table)
                 elif isinstance(step, _AddMapLayer):
                     self.map_handler._add_map_layer(
+                        table=step.source_table,
                         layer_id=step.layer_id,
                         color=step.color,
                         filters=step.fi

@@ -1,7 +1,6 @@
 import dash
 import logging
 import asyncio
-import pathlib
 from sqlalchemy import create_engine
 from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
@@ -22,12 +21,7 @@ server = app.server
 # Set up geo-assistant
 agent = GeoAgent(
     engine=engine,
-    map_handler=MapHandler(
-        tables=[
-            "public.transmission",
-            "public.pluto"
-        ]
-    ),
+    map_handler=MapHandler(),
     data_handler=DataHandler(
         default_table="pluto"
     ),
