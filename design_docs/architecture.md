@@ -40,8 +40,9 @@ More information can be found on the [Github Page](https://github.com/CrunchyDat
 
 This is the main application that carries the core logic. This application is split into several key components, including (not limited to for simplicity):
   - `DashApp`: Frontend application that accepts data from user, displays the map, and displays the chat log
-  - `DataDictionaryStore`: Stores all the data parsed from a data dictionary (only supports pdfs for now), and creates a faiss index to search field definitions
-  - `GeoAgent`: Holds the core logic for calling OpenAI SDK, routing tool calls, and managing messages
+  - `FieldDefinitionStore`: Vector store of field definitions parsed from the PLUTO data dictionary. Used to dynamically build map-filter tools.
+  - `SupplementalInfoStore`: Vector store for any additional appendix or lookup-table information to provide extra context for the model.
+  - `GeoAgent`: Holds the core logic for calling OpenAI SDK, routing tool calls, managing messages and orchestrating `run_analysis` workflows.
   - `MapHandler`: Manages the plotly map object by adding *layers* and updating the figured with those. Directly interacts with `pg-tileserv`
   - `DataHandler`: Wrapper class to easily query the PostGIS database
 
@@ -56,7 +57,8 @@ sequenceDiagram
   end
 
   box Gray AgentPipeline
-    participant DataDictionaryStore
+    participant FieldDefinitionStore
+    participant SupplementalInfoStore
     participant GeoAgent
     participant MapHandler
     participant DataHandler
@@ -67,11 +69,16 @@ sequenceDiagram
   end
 
   User->>DashApp: User Message
-  DataDictionaryStore->>GeoAgent: Supplies Relevant Information for System Message
-  DashApp->>DataDictionaryStore: Queries with User Message
-  DataDictionaryStore->>GeoAgent: Relevant Field Definitions to Create Tools
-  GeoAgent->>OpenAI: Queries with Tools and User Message
+  DashApp->>FieldDefinitionStore: Query for field definitions
+  DashApp->>SupplementalInfoStore: Query for supplemental info
+  FieldDefinitionStore->>GeoAgent: Relevant Field Definitions
+  SupplementalInfoStore->>GeoAgent: Contextual Information
+  GeoAgent->>OpenAI: Queries with Tools, Context, and User Message
   OpenAI->>GeoAgent: Response with Potential Tool Calls
+  alt run_analysis called
+    GeoAgent->>DataHandler: Execute Analysis Steps
+    GeoAgent->>MapHandler: Update Map Layers
+  end
   loop Every OpenAI Tool Call:
     GeoAgent->>MapHandler: Updates Map based on Tool Call
     GeoAgent->>DataHandler: Queries for Relevant Information
