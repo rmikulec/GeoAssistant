@@ -1,6 +1,6 @@
 {
-    "name": "Ada",
+    "name": "GeoAssistant",
     "description": "A GPT-driven science explainer! \n Ask any question and have an article answering your question generated in minutes. View any sources in the sidebar to learn more.",
-    "url": "https://github.com/rmikulec/ada",
+    "url": "https://github.com/rmikulec/geoassistant",
     "imageURLs": ["https://github.com/rmikulec/GeoAssistant/blob/main/banner.png"]
 }
