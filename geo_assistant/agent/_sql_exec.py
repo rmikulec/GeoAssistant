@@ -28,7 +28,6 @@ def execute_template_sql(
     template: Template = Template(
         source=(TEMPATE_PATH / (template_name + ".sql")).read_text()
     )
-    print(kwargs)
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
     if engine is None:

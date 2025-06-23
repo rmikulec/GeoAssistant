@@ -28,7 +28,7 @@ You may reference this context for business logic, user goals, or other insights
 
 ### Task
 Plan and output a detailed, multi-step GIS analysis pipeline.
-- `MergeStep`: Merge data from two seperate tables
+- `MergeStep`: Merge data from two seperate tables. Be aware of the geometry types of the two tables. You may need to create a Buffer before merging
 - `AggregateStep`: Aggregate data in a table
 - `BufferStep`: Create a buffer aroung geometry in a table
 - `FilterStep`: Filter a table
@@ -38,11 +38,13 @@ Plan and output a detailed, multi-step GIS analysis pipeline.
 Make sure that columns needed in step i are selected in step i-1 (meaning that each steps always have the right columns available)
 When selecting columns from an `output_table` of a previous step, be aware that available columns might have changed (e.g., through aggregation or merging). Carefully confirm that you are referencing only columns available from that specific `output_table`.
 When building filters, make sure the 'value' type matches that of the field definition
+WHen merging, make sure the geometry types are compatible. For example, if merging between a Line and a Polygon, it may be better to create a buffer around the Line first and merge on the Buffer
 
 -- Available Tables --
 When referencing another table, ONLY these values and the `output_table` of a previous step can be used:
-{% for table in tables %}
-  - {{ table }}
+{% for table, geo in tables.items() %}
+  - {{ table }} 
+    - Geometry Type {{ geo }}
 {% endfor %}
 
 ### Output Schema

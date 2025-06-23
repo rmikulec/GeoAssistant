@@ -28,6 +28,11 @@ def parse_args():
         help="EPSG code of source CRS (if not set, uses whatever the Parquet declares)",
     )
     p.add_argument(
+        "--metadata",
+        type=str,
+        help="The path the the metadata pdf with field definitions"
+    )
+    p.add_argument(
         "--dest-crs",
         type=int,
         default=3857,
@@ -93,19 +98,29 @@ def main():
     try:
         with engine.begin() as conn:
             conn.execute(text(create_idx_sql))
-        print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
-    except Exception as e:
-        print(f"Error creating spatial index: {e}", file=sys.stderr)
-        sys.exit(1)
+            print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
 
-    # 7) update planner statistics
-    analyze_sql = f"ANALYZE {args.table};"
-    try:
-        with engine.begin() as conn:
+            query = text(
+                (
+                    "SELECT Populate_Geometry_Columns("
+                    f"'public.{args.table}'::regclass"
+                    ");"
+                )
+            )
+            conn.execute(
+                query
+            )
+            print("grant to public")
+            conn.execute(
+                text(f"GRANT SELECT ON public.{args.table} TO public")
+            )
+
+            analyze_sql = f"ANALYZE {args.table};"
+
             conn.execute(text(analyze_sql))
-        print(f"Analyzed table '{args.table}' to update planner statistics.")
+            print(f"Analyzed table '{args.table}' to update planner statistics.")
     except Exception as e:
-        print(f"Error analyzing table: {e}", file=sys.stderr)
+        print(f"Error setting up table: {e}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

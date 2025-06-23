@@ -50,6 +50,7 @@ class MapHandler:
         The direct json data for the table from pg-tileserv
         """
         try:
+            print(table_id)
             return requests.get(
                 f"{Configuration.pg_tileserv_url}/{table_id}.json"
             ).json()

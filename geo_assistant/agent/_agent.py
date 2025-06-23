@@ -208,7 +208,7 @@ class GeoAgent:
                 except Exception as e:
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             elif tool_call.name == "run_analysis":
-                res = await self.run_analysis(**kwargs)
+                tool_response = await self.run_analysis(**kwargs)
             else:
                 try:
                     tool_response = self.tools[tool_call.name](**kwargs)
@@ -236,7 +236,8 @@ class GeoAgent:
     def _verify_fields(self, field_results: list[dict]):
         updated_results = []
 
-        for metadata in self.map_handler._tables_meta.values():
+        for table in self.map_handler._tileserv_index.keys():
+            metadata = self.map_handler._get_table_metadata(table)
             for property in metadata['properties']:
                 for field_result in field_results:
                     if property['name'].lower() == field_result['name'].lower():
@@ -251,6 +252,34 @@ class GeoAgent:
 
         return updated_results
     
+    def _get_geometry_type(self, engine: Engine, table: str, schema: str = 'public', geom_col: str = Configuration.geometry_column) -> str:
+        """
+        Return the PostGIS geometry type for the specified table.
+
+        Args:
+            conn_params: dict of connection params for psycopg2.connect, e.g.
+                        {"host":"localhost","port":5432,"dbname":"yourdb",
+                        "user":"you","password":"secret"}
+            table:       name of the table to inspect
+            schema:      schema where the table lives (default "public")
+            geom_col:    name of the geometry column (default "geom")
+
+        Returns:
+            A string like "ST_Point", "ST_Polygon", etc., or None if not found.
+        """
+        stmt = text(f"""
+            SELECT DISTINCT ST_GeometryType("{geom_col}") AS geom_type
+            FROM "{schema}"."{table}"
+            WHERE "{geom_col}" IS NOT NULL
+            LIMIT 1
+        """)
+
+        with engine.connect() as conn:
+            result = conn.execute(stmt)
+            row = result.fetchone()
+            print(row)
+            return row[0] if row else None
+
 
     def _postprocess_table(
         self,
@@ -293,11 +322,17 @@ class GeoAgent:
         # Query for relevant fields
         field_results = await self.field_store.query(query, k=15)
         fields = self._verify_fields(field_results)
+        tables = set([field['table'] for field in fields])
+        tables = {
+            table: self._get_geometry_type(self.engine, table)
+            for table in tables
+        }
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
             steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _AddMapLayer],
-            fields=[field['name'] for field in fields]
+            fields=[field['name'] for field in fields],
+            tables=list(tables.keys())
         )
         # Query for relative info
         context = await self.info_store.query(query, k=10)
@@ -305,10 +340,9 @@ class GeoAgent:
         system_message = system_message_template.render(
             field_definitions=fields,
             context_info=context,
-            tables=set([field['table'] for field in fields])
+            tables=tables
         )
-        print(system_message)
-
+  
         # Hit openai to generate a step-by-step plan for the analysis
         res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
             input=[
@@ -323,26 +357,34 @@ class GeoAgent:
         )
         analysis_steps = res.output_parsed.steps
         print(res.output_parsed.model_dump_json(indent=2))
+
         # Run through the steps, executing each query
         print(f"Steps: {[step.name for step in analysis_steps]}")
 
         tables_created = []
-
+        output_tables = [step.output_table for step in analysis_steps if isinstance(step, _SQLStep)]
         try:
             for step in analysis_steps:
                 print(f"Running {step.name}")
                 print(step.reasoning)
 
                 if isinstance(step, _SQLStep):
-                    step._execute(self.engine)
+                    step._execute(self.engine, output_tables)
                     tables_created.append(step.output_table)
                 elif isinstance(step, _AddMapLayer):
-                    self.map_handler._add_map_layer(
-                        table=step.source_table,
-                        layer_id=step.layer_id,
-                        color=step.color,
-                        filters=step.fi
-                    )
+                    if step.source_table.outout_table_idx:
+                        self.map_handler._add_map_layer(
+                            table="public."+tables_created[step.source_table.outout_table_idx],
+                            layer_id=step.layer_id,
+                            color=step.color,
+                        )
+                    else:
+                        self.map_handler._add_map_layer(
+                            table="public."+step.source_table.source_table,
+                            layer_id=step.layer_id,
+                            color=step.color,
+                        )
+
 
             self._postprocess_table(tables_created[-1])
         except Exception as e:
@@ -350,7 +392,7 @@ class GeoAgent:
         finally:
             # No matter what, drop all the tables but the last possible
             if len(tables_created) > 1:
-                tables_to_drop = tables_created[:(len(analysis_steps)-1)]
+                tables_to_drop = tables_created[:(len(tables_created)-1)]
                 print(f"Dropping: {tables_to_drop}")
                 execute_template_sql(
                     engine=self.engine,
@@ -359,7 +401,7 @@ class GeoAgent:
             )
                 
         return (
-            f"GIS Analysis complete. Final table created: {analysis_steps[-1].output_table}"
+            f"GIS Analysis complete. Final table created: {tables_created[-1]}"
             f"Table description:"
             f"{analysis_steps[-1].model_dump_json(indent=2)}"
         )
