@@ -18,7 +18,8 @@ from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
-from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer
+from geo_assistant.agent.analysis import _GISAnalysis
+from geo_assistant.agent._steps import _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer
 
 
 logger = logging.getLogger(__name__)
@@ -304,8 +305,6 @@ class GeoAgent:
                     )
                 else:
                     print(f"Report item type {type(item)} handler not implemented")
-        except Exception as e:
-            raise e
         finally:
             # No matter what, drop all the tables but the last possible
             if len(analysis.output_tables) > 1:
