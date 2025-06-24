@@ -18,8 +18,7 @@ from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
-from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer, _SQLStep
-from geo_assistant.agent._sql_exec import execute_template_sql
+from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer
 
 
 logger = logging.getLogger(__name__)
@@ -114,7 +113,7 @@ class GeoAgent:
     def _update_dev_message(self):
         self.messages[0] = {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
                 map_status=json.dumps(self.map_handler.status,indent=2),
-                supplement_information=self.supplement_info
+                supplement_information=""
             )    
         }
     
