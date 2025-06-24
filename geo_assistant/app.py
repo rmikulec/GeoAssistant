@@ -1,5 +1,5 @@
 import dash
-import logging
+from geo_assistant.logging import get_logger
 import asyncio
 from sqlalchemy import create_engine
 from dash import html, dcc, Input, Output, State, no_update
@@ -11,7 +11,7 @@ from geo_assistant.config import Configuration
 
 
 # Initialize Classes
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 # Set up app
 engine = create_engine(url=Configuration.db_connection_url)
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])

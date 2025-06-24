@@ -1,6 +1,8 @@
-import requests
+from geo_assistant.logging import get_logger
 from functools import cached_property
 from collections import defaultdict
+
+import requests
 
 from plotly.graph_objects import Figure
 import plotly.express as px
@@ -8,6 +10,8 @@ import plotly.express as px
 from geo_assistant.handlers._filter import GeoFilter
 from geo_assistant.handlers._exceptions import InvalidTileservTableID
 from geo_assistant.config import Configuration
+
+logger = get_logger(__name__)
 
 class MapHandler:
     """
@@ -50,7 +54,7 @@ class MapHandler:
         The direct json data for the table from pg-tileserv
         """
         try:
-            print(table_id)
+            logger.debug(f"Fetching metadata for table {table_id}")
             return requests.get(
                 f"{Configuration.pg_tileserv_url}/{table_id}.json"
             ).json()
@@ -130,7 +134,7 @@ class MapHandler:
         # Add all filters to layer_filters dict, keeping them together
         self._layer_filters[layer_id] = filters
         self._active_table = table
-        print(self.map_layers)
+        logger.debug(f"Current map layers: {self.map_layers}")
     
 
     def _remove_map_layer(self, layer_id: str) -> str:
@@ -141,6 +145,7 @@ class MapHandler:
             del self.map_layers[table_layer_id]
         del self._layer_filters[layer_id]
         del self._layer_ids[layer_id]
+        logger.debug(f"Removed layer: {layer_id}")
         return f"Layer {layer_id} removed from the map"
 
     def _reset_map(self) -> str:
@@ -149,6 +154,7 @@ class MapHandler:
         """
         self.map_layers = {}
         self._layer_filters = {}
+        logger.debug("Reset map to blank state")
         return "All layers removed from map, blank map initialized"
 
     def update_figure(self) ->Figure:
@@ -161,6 +167,7 @@ class MapHandler:
             Figure: The MapHandler's map plotly figure, configured with all the correct layers
         """
         layers = list(self.map_layers.values())
+        logger.debug(f"Updating figure with {len(layers)} layers")
         if layers:
             self.figure.update_layout(
                 map_style="dark",

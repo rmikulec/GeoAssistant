@@ -2,10 +2,14 @@
 import argparse
 import sys
 
+from geo_assistant.logging import get_logger
+
 import geopandas as gpd
 from sqlalchemy import create_engine, text
 
 from geo_assistant.config import Configuration
+
+logger = get_logger(__name__)
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -59,7 +63,7 @@ def main():
     try:
         gdf = gpd.read_parquet(args.parquet)
     except Exception as e:
-        print(f"Error reading Parquet: {e}", file=sys.stderr)
+        logger.error(f"Error reading Parquet: {e}")
         sys.exit(1)
 
     # 2) enforce source CRS if provided
@@ -92,10 +96,10 @@ def main():
             index=args.index
         )
     except Exception as e:
-        print(f"Error writing to PostGIS: {e}", file=sys.stderr)
+        logger.error(f"Error writing to PostGIS: {e}")
         sys.exit(1)
 
-    print(f"Loaded {len(gdf)} features into table '{args.table}'.")
+    logger.info(f"Loaded {len(gdf)} features into table '{args.table}'.")
 
     # 6) create spatial index on the geometry column
     geom_col = gdf.geometry.name  # usually "geometry"
@@ -109,7 +113,7 @@ def main():
     try:
         with engine.begin() as conn:
             conn.execute(text(create_idx_sql))
-            print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
+            logger.info(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
 
             query = text(
                 (
@@ -121,17 +125,21 @@ def main():
             conn.execute(
                 query
             )
-            print("grant to base")
+            logger.debug(
+                f"Granting SELECT on {Configuration.db_base_schema}.{args.table} to public"
+            )
             conn.execute(
-                text(f"GRANT SELECT ON {Configuration.db_base_schema}.{args.table} TO public")
+                text(
+                    f"GRANT SELECT ON {Configuration.db_base_schema}.{args.table} TO public"
+                )
             )
 
             analyze_sql = f"ANALYZE {Configuration.db_base_schema}.{args.table};"
 
             conn.execute(text(analyze_sql))
-            print(f"Analyzed table '{args.table}' to update planner statistics.")
+            logger.info(f"Analyzed table '{args.table}' to update planner statistics.")
     except Exception as e:
-        print(f"Error setting up table: {e}", file=sys.stderr)
+        logger.error(f"Error setting up table: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
