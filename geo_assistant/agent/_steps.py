@@ -7,6 +7,7 @@ from sqlalchemy import Engine, text
 
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
+from geo_assistant.agent.report import GISReport, MapLayerCreated, TableCreated
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
 
@@ -87,12 +88,17 @@ class _GISAnalysisStep(BaseModel):
             __base__=cls,
             **(dynamic_fields | dynamic_list_fields | table_fields)
         )
+    
+
+class _ReportingStep(_GISAnalysisStep):
+    
+    def export(self):
+        pass
 
 
 class _SQLStep(_GISAnalysisStep):
     _type: Literal["base"] = "base"
     _is_intermediate: bool = False
-    select: list[DynamicField]
     output_table: str = Field(..., description="Name of table being created")
 
     def _get_geometry_type(
@@ -113,9 +119,8 @@ class _SQLStep(_GISAnalysisStep):
         """
         tables = []
         for name, f in self.__class__.model_fields.items():
-            if getattr(f, "json_schema_extra"):
-                if f.json_schema_extra.get("is_table", False):
-                    tables.append(getattr(self, name))
+            if issubclass(f.annotation, _SourceTable):
+                tables.append(getattr(self, name).source_table.value)
 
         def choose_typmod(types: set[str]) -> str:
             poly = {'POLYGON', 'MULTIPOLYGON'}
@@ -133,7 +138,7 @@ class _SQLStep(_GISAnalysisStep):
             # 1) Gather distinct geometry types
             results = [
                 conn.execute(
-                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
+                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {schema}.{table}")
                 )
                 for table in tables
             ]
@@ -141,21 +146,9 @@ class _SQLStep(_GISAnalysisStep):
             # 2) Choose the target typmod
             return choose_typmod(geom_types)
 
-    def _create_spatial_index(self, engine: Engine, table: str):
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    f'CREATE INDEX IF NOT EXISTS "public".{table}_geometry_gist_idx ON "public"."{table}" USING GIST (geometry);'
 
-                )
-            )
-            print("analyze")
-            conn.execute(
-                text(f'ANALYZE "{table}"')
-            )
-
-    def _execute(self, engine: Engine, output_tables: list[str]):
-        geometry_type = self._get_geometry_type(engine)
+    def _execute(self, engine: Engine, schema: str, output_tables: list[str]) -> TableCreated:
+        geometry_type = self._get_geometry_type(engine, schema)
 
         # Determine tables
         table_args = {}
@@ -176,8 +169,15 @@ class _SQLStep(_GISAnalysisStep):
             geometry_column=Configuration.geometry_column,
             srid=3857,
             gtype=geometry_type,
-            select_columns=self.select,
+            schema=schema,
             **(table_args | other_args)
+        )
+
+        return TableCreated(
+            name=self.name,
+            reason=self.reasoning,
+            table=self.output_table,
+            is_intermediate=True
         )
 
     def _drop(self, engine: Engine) -> None:
@@ -199,6 +199,7 @@ class _SQLStep(_GISAnalysisStep):
 
 class _FilterStep(_SQLStep):
     _type: Literal['filter'] = "filter"
+    select: list[DynamicField]
     source_table: _SourceTable
     filters: list[_FilterItem]
 
@@ -216,7 +217,7 @@ class _FilterStep(_SQLStep):
             filters=(filters_union, ...)
         )
     
-    def _execute(self, engine: Engine, output_tables: list[str]):
+    def _execute(self, engine: Engine, schema: str, output_tables: list[str]):
         for f in self.filters:
             # single‐value filters
             if hasattr(f, "value") and isinstance(f.value, str):
@@ -235,15 +236,18 @@ class _FilterStep(_SQLStep):
             if hasattr(f, "upper") and isinstance(f.upper, str):
                 f.upper = f"'{f.upper}'"
 
-        return super()._execute(engine, output_tables)
+        return super()._execute(engine, schema, output_tables)
 
 class _MergeStep(_SQLStep):
     _type: SkipJsonSchema[Literal['merge']] = "merge"
-    left_table: _SourceTable = Field(..., is_table=True)
-    right_table: _SourceTable = Field(..., is_table=True)
+    left_select: list[DynamicField]
+    right_select: list[DynamicField]
+    left_table: _SourceTable
+    right_table: _SourceTable
     spatial_predicate: Literal['intersects','contains','within','dwithin'] = Field(
         ..., description="ST_<predicate> or DWithin"
     )
+    output_geometry_type: GeometryType = Field(description="The geometry type after the spatial join. Choose carefull based on left, right table types as well as the spatial predicate")
     distance: Optional[float] = Field(
         None,
         description="Buffer distance (only for dwithin)"
@@ -256,6 +260,7 @@ class _MergeStep(_SQLStep):
 
 class _AggregateStep(_SQLStep):
     _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
+    select: list[DynamicField]
     source_table: _SourceTable
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
     spatial_aggregator: Optional[Literal[
@@ -287,7 +292,7 @@ class _AggregateStep(_SQLStep):
 
 class _BufferStep(_SQLStep):
     _type: SkipJsonSchema[Literal['buffer']] = "buffer"
-    source_table: _SourceTable = Field(..., is_table=True)
+    source_table: _SourceTable
     buffer_distance: float = Field(..., description="Distance to buffer")
     buffer_unit: Literal['meters','kilometers'] = Field(
         'meters',
@@ -295,29 +300,28 @@ class _BufferStep(_SQLStep):
     )
 
 
-class _AddMapLayer(_GISAnalysisStep):
+class _AddMapLayer(_ReportingStep):
     _type: SkipJsonSchema[Literal["addLayer"]] = "addLayer"
     source_table: _SourceTable
     layer_id: str = Field(description="The id of the new map layer")
     color: str = Field(description="Hex value of the color of the geometries")
-    filters: list[_FilterStep]
 
-    @classmethod
-    def _build_step_model(cls, fields_enum: type[Enum], tables_enum: type[Enum]) -> Type[Self]:
-        cls = super()._build_step_model(fields_enum=fields_enum, tables_enum=tables_enum)
-        dynamic_filters = [
-            filter_._build_filter(fields_enum=fields_enum)
-            for filter_ in SQLFilters
-        ]
-        filters_union = list[Union[tuple(dynamic_filters)]]
-        return create_model(
-            cls.__name__.removeprefix('_'),
-            __base__=cls,
-            filters=(filters_union, ...)
+
+    def export(self) -> MapLayerCreated:
+        return MapLayerCreated(
+            name=self.name,
+            layer_id=self.layer_id,
+            reason=self.reasoning,
+            source_table="",
+            color=self.color
         )
 
 
 class _GISAnalysis(BaseModel):
+    name: str = Field(description="Snake case name of the analysis")
+    steps: list[_GISAnalysisStep]
+    #Private variables to not be exposed by pydantic, but used for running the analysis
+    _tables_created: SkipJsonSchema[list[str]] = []
 
     @classmethod
     def build_model(cls, steps: list[Type[_SQLStep]], fields: list[str], tables: list[str]) -> Type["_GISAnalysis"]:
@@ -342,3 +346,53 @@ class _GISAnalysis(BaseModel):
             steps=(list[StepUnion], ...)
         )
     
+
+    @property
+    def output_tables(self) -> list[str]:
+        """
+        List of all the tables that are / will be created when executing analysis
+        """
+        return [
+            step.output_table
+            for step in self.steps
+            if issubclass(step.__class__, _SQLStep)
+        ]
+    
+    @property
+    def sql_steps(self) -> list[_SQLStep]:
+        return [
+            step
+            for step in self.steps
+            if issubclass(step.__class__, _SQLStep)
+        ]
+    
+    @property
+    def report_steps(self) -> list[_ReportingStep]:
+        return [
+            step
+            for step in self.steps
+            if issubclass(step.__class__, _ReportingStep)
+        ]
+
+    
+
+    def execute(self, engine: Engine) -> GISReport:
+        items = []
+
+        for step in self.steps:
+            print(f"Running {step.name}")
+            print(step.reasoning)
+
+            if isinstance(step, _SQLStep):
+                items.append(step._execute(engine, self.name, self.output_tables))
+            elif isinstance(step, _AddMapLayer):
+                layer_created_item = step.export()
+                if step.source_table.outout_table_idx:
+                    layer_created_item.source_table = "public." + self.output_tables[step.source_table.outout_table_idx]
+                else:
+                    print(step.source_table.source_table)
+                    layer_created_item.source_table = "public."+step.source_table.source_table.value
+            
+        return GISReport(
+            items=items
+        )

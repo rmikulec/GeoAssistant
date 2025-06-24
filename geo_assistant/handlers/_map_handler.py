@@ -33,7 +33,7 @@ class MapHandler:
         self.map_layers: dict = {}
         self._layer_filters: dict[str, list[GeoFilter]] = defaultdict(list)
         self._layer_ids: dict[str, list[str]] = defaultdict(list)
-        self._active_table: str = "public." + default_table
+        self._active_table: str = "base." + default_table
     
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)

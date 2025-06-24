@@ -42,9 +42,9 @@ WHen merging, make sure the geometry types are compatible. For example, if mergi
 
 -- Available Tables --
 When referencing another table, ONLY these values and the `output_table` of a previous step can be used:
-{% for table, geo in tables.items() %}
-  - {{ table }} 
-    - Geometry Type {{ geo }}
+{% for table in tables %}
+  - {{ table.name }} 
+    - Geometry Type {{ table.geometry_type }}
 {% endfor %}
 
 ### Output Schema

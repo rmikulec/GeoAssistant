@@ -1,15 +1,18 @@
 {# templates/merge.sql #}
-DROP TABLE IF EXISTS "{{ output_table }}";
+DROP TABLE IF EXISTS "{{ schema }}.{{ output_table }}";
 
-CREATE TABLE "{{ output_table }}" AS
+CREATE TABLE "{{ schema }}.{{ output_table }}" AS
 SELECT
-{%- for col in select_columns %}
-  "{{ col.value }}",
+{%- for col in left_select %}
+  l."{{ col.value }}",
+{%- endfor %}
+{%- for col in right_select %}
+  r."{{ col.value }}",
 {%- endfor %}
   ST_SetSRID(
     ST_Transform(l."{{ geometry_column }}", {{ srid }}),
     {{ srid }}
-  )::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
+  )::Geometry({{ output_geometry_type }}, {{ srid }}) AS "{{ geometry_column }}"
 FROM "{{ left_table }}" AS l
 JOIN "{{ right_table }}" AS r
 ON

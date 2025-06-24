@@ -1,7 +1,7 @@
 {# templates/filter_step.sql.j2 #}
-DROP TABLE IF EXISTS "{{ output_table }}";
+DROP TABLE IF EXISTS "{{ schema }}.{{ output_table }}";
 
-CREATE TABLE "{{ output_table }}" AS
+CREATE TABLE "{{ schema }}.{{ output_table }}" AS
 SELECT
 {%- for col in select_columns %}
   "{{ col.value }}",

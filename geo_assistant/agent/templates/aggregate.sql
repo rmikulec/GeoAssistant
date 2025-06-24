@@ -1,9 +1,9 @@
 {# templates/aggregate.sql.j2 #}
 -- drop any existing
-DROP TABLE IF EXISTS "{{ output_table }}";
+DROP TABLE IF EXISTS "{{ schema }}.{{ output_table }}";
 
 -- create with proper geometry typmod & SRID baked in
-CREATE TABLE "{{ output_table }}" AS
+CREATE TABLE "{{ schema }}.{{ output_table }}" AS
 SELECT
 {% for agg in aggregators -%}
   {%- if agg.operator == 'COUNT' -%}

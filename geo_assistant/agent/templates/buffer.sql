@@ -1,7 +1,7 @@
 {# templates/buffer.sql #}
-DROP TABLE IF EXISTS "{{ output_table }}";
+DROP TABLE IF EXISTS "{{ schema }}.{{ output_table }}";
 
-CREATE TABLE "{{ output_table }}" AS
+CREATE TABLE "{{ schema }}.{{ output_table }}" AS
 SELECT
   *,
   ST_SetSRID(
@@ -15,9 +15,9 @@ SELECT
 FROM "{{ source_table }}";
 
 -- drop the old geometry so we only have one
-ALTER TABLE "{{ output_table }}"
+ALTER TABLE "{{ schema }}.{{ output_table }}"
 DROP COLUMN IF EXISTS "{{ geometry_column }}";
 
 -- rename the buffered column into place
-ALTER TABLE "{{ output_table }}"
+ALTER TABLE "{{ schema }}.{{ output_table }}"
 RENAME COLUMN geom_buf TO "{{ geometry_column }}";

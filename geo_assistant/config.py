@@ -21,6 +21,7 @@ class DefaultConfiguration(BaseSettings):
     db_password: str = Field(default="pw")
     db_port: int = Field(default=5432)
     db_connection_url: str = Field(default="")
+    db_base_schema: str = Field(default="base")
     
     #Other
     geometry_column: str = Field(default="geometry")

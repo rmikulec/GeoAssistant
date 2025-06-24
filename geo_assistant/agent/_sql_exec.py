@@ -30,6 +30,7 @@ def execute_template_sql(
     )
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
+    print(sql)
     if engine is None:
         print(sql)
         return sql

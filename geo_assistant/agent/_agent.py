@@ -12,6 +12,8 @@ from jinja2 import Template
 from sqlalchemy import Engine, text
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
+from geo_assistant.agent.report import TableCreated, MapLayerCreated
+from geo_assistant.table_registry import TableRegistry
 from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
@@ -59,16 +61,15 @@ class GeoAgent:
         field_store: FieldDefinitionStore = None,
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
-        supplement_info: str = None,
         use_smart_search: bool = True
     ):
-        self.model = model
-        self.engine = engine
-        self.use_smart_search = use_smart_search
-        self.supplement_info = supplement_info
-        self.map_handler = map_handler
-        self.data_handler = data_handler
-        self.client = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
+        self.model: str = model
+        self.engine: Engine = engine
+        self.use_smart_search: bool = use_smart_search
+        self.map_handler: MapHandler = map_handler
+        self.data_handler: DataHandler = data_handler
+        self.client: openai.AsyncOpenAI = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
+        self.registry: TableRegistry = TableRegistry.load_from_tileserv(self.engine)
 
         if field_store is None:
             self.field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
@@ -83,7 +84,7 @@ class GeoAgent:
         self.messages = [
             {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
                     map_status="Graph not updated yet.",
-                    supplement_information=supplement_info
+                    supplement_information=""
                 )    
             }
         ]
@@ -233,81 +234,6 @@ class GeoAgent:
         return ai_message
     
 
-    def _verify_fields(self, field_results: list[dict]):
-        updated_results = []
-
-        for table in self.map_handler._tileserv_index.keys():
-            metadata = self.map_handler._get_table_metadata(table)
-            for property in metadata['properties']:
-                for field_result in field_results:
-                    if property['name'].lower() == field_result['name'].lower():
-                        temp = field_result.copy()
-                        temp.pop('name')
-                        updated_results.append(
-                            {
-                                "name": property['name'],
-                                **temp
-                            }
-                        )
-
-        return updated_results
-    
-    def _get_geometry_type(self, engine: Engine, table: str, schema: str = 'public', geom_col: str = Configuration.geometry_column) -> str:
-        """
-        Return the PostGIS geometry type for the specified table.
-
-        Args:
-            conn_params: dict of connection params for psycopg2.connect, e.g.
-                        {"host":"localhost","port":5432,"dbname":"yourdb",
-                        "user":"you","password":"secret"}
-            table:       name of the table to inspect
-            schema:      schema where the table lives (default "public")
-            geom_col:    name of the geometry column (default "geom")
-
-        Returns:
-            A string like "ST_Point", "ST_Polygon", etc., or None if not found.
-        """
-        stmt = text(f"""
-            SELECT DISTINCT ST_GeometryType("{geom_col}") AS geom_type
-            FROM "{schema}"."{table}"
-            WHERE "{geom_col}" IS NOT NULL
-            LIMIT 1
-        """)
-
-        with engine.connect() as conn:
-            result = conn.execute(stmt)
-            row = result.fetchone()
-            print(row)
-            return row[0] if row else None
-
-
-    def _postprocess_table(
-        self,
-        table: str,
-    ):
-        """
-        After CTAS, normalize the geom column, register it,
-        then grant/select, add GIST index, and analyze.
-        """
-
-        # 2) grant, index, analyze
-        with self.engine.begin() as conn:
-            query = text(
-                (
-                    "SELECT Populate_Geometry_Columns("
-                    f"'public.{table}'::regclass"
-                    ");"
-                )
-            )
-            conn.execute(
-                query
-            )
-            print("grant to public")
-            conn.execute(
-                text(f"GRANT SELECT ON public.{table} TO public")
-            )
-
-
     async def run_analysis(self, query: str):
         """
         Runs an analysis given a user message. This is a more time consuming process than 'chat',
@@ -320,19 +246,18 @@ class GeoAgent:
         # Setup the system message template
         system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
         # Query for relevant fields
-        field_results = await self.field_store.query(query, k=15)
-        fields = self._verify_fields(field_results)
-        tables = set([field['table'] for field in fields])
-        tables = {
-            table: self._get_geometry_type(self.engine, table)
-            for table in tables
-        }
+        fields = await self.field_store.query(query, k=15)
+        fields = self.registry.verify_fields(fields)
+        field_names = [field['name'] for field in fields]
+        # Query registry for all tables that make up the set of fields
+        tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
+        print(tables)
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
             steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _AddMapLayer],
-            fields=[field['name'] for field in fields],
-            tables=list(tables.keys())
+            fields=field_names,
+            tables=[table.name for table in tables]
         )
         # Query for relative info
         context = await self.info_store.query(query, k=10)
@@ -342,7 +267,8 @@ class GeoAgent:
             context_info=context,
             tables=tables
         )
-  
+        print(system_message)
+        
         # Hit openai to generate a step-by-step plan for the analysis
         res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
             input=[
@@ -355,53 +281,48 @@ class GeoAgent:
             },
             text_format=DynGISModel
         )
-        analysis_steps = res.output_parsed.steps
-        print(res.output_parsed.model_dump_json(indent=2))
-
+        analysis = res.output_parsed
+        print(analysis.model_dump_json(indent=2))
         # Run through the steps, executing each query
-        print(f"Steps: {[step.name for step in analysis_steps]}")
+        print(f"Steps: {[step.name for step in analysis.steps]}")
 
-        tables_created = []
-        output_tables = [step.output_table for step in analysis_steps if isinstance(step, _SQLStep)]
         try:
-            for step in analysis_steps:
-                print(f"Running {step.name}")
-                print(step.reasoning)
-
-                if isinstance(step, _SQLStep):
-                    step._execute(self.engine, output_tables)
-                    tables_created.append(step.output_table)
-                elif isinstance(step, _AddMapLayer):
-                    if step.source_table.outout_table_idx:
-                        self.map_handler._add_map_layer(
-                            table="public."+tables_created[step.source_table.outout_table_idx],
-                            layer_id=step.layer_id,
-                            color=step.color,
-                        )
-                    else:
-                        self.map_handler._add_map_layer(
-                            table="public."+step.source_table.source_table,
-                            layer_id=step.layer_id,
-                            color=step.color,
-                        )
-
-
-            self._postprocess_table(tables_created[-1])
+            # Execute and gather the report
+            report = analysis.execute(self.engine)
+            # Perform any actions required based on the report
+            for item in report.items:
+                if isinstance(item, TableCreated):
+                    table = self.registry.register(
+                        name=item.table,
+                        schema=analysis.name,
+                        engine=self.engine
+                    )
+                    table._postprocess(self.engine)
+                elif isinstance(item, MapLayerCreated):
+                    self.map_handler._add_map_layer(
+                        table=item.source_table,
+                        layer_id=item.layer_id,
+                        color=item.color
+                    )
+                else:
+                    print(f"Report item type {type(item)} handler not implemented")
         except Exception as e:
             raise e
         finally:
             # No matter what, drop all the tables but the last possible
-            if len(tables_created) > 1:
-                tables_to_drop = tables_created[:(len(tables_created)-1)]
+            if len(analysis.output_tables) > 1:
+                tables_to_drop = analysis.output_tables[:(len(analysis._tables_created)-1)]
                 print(f"Dropping: {tables_to_drop}")
+                """
                 execute_template_sql(
                     engine=self.engine,
                     template_name="drop",
                     output_tables=tables_to_drop
-            )
+                )
+                """
                 
         return (
-            f"GIS Analysis complete. Final table created: {tables_created[-1]}"
-            f"Table description:"
-            f"{analysis_steps[-1].model_dump_json(indent=2)}"
+            f"GIS Analysis complete."
+            f"Report description:"
+            f"{report.model_dump_json(indent=2)}"
         )
