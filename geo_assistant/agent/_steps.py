@@ -5,11 +5,15 @@ from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
+from geo_assistant.logging import get_logger
+
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.agent.report import GISReport, MapLayerCreated, TableCreated
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
+
+logger = get_logger(__name__)
 
 DynamicField = Type[str]
 
@@ -394,8 +398,8 @@ class _GISAnalysis(BaseModel):
         items = []
 
         for step in self.steps:
-            print(f"Running {step.name}")
-            print(step.reasoning)
+            logger.info(f"Running {step.name}")
+            logger.debug(step.reasoning)
 
             if isinstance(step, _SQLStep):
                 items.append(step._execute(engine, self.name, self.output_tables))
