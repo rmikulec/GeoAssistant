@@ -102,7 +102,7 @@ class MapHandler:
                     "source": [
                         self._get_base_tileurl(table) + "&filter=" + filter_
                     ],
-                    "sourcelayer": table,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+                    "sourcelayer": table,                  # ← must match your tileset name
                     "type": style,                                 # draw lines
                     "color": color,
                     "below": "traces" 
@@ -118,7 +118,7 @@ class MapHandler:
                 "source": [
                     self._get_base_tileurl(table)
                 ],
-                "sourcelayer": table,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+                "sourcelayer": table,                  # ← must match your tileset name
                 "type": style,                                 # draw lines
                 "color": color,
                 "below": "traces" 
