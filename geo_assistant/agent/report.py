@@ -26,5 +26,10 @@ class PlotlyMapLayerArguements(BaseModel):
     color: str
 
 
+class SaveTable(BaseModel):
+    table: str
+    schema: str
+
+
 class GISReport(BaseModel):
     items: list[Union[TableCreated, PlotlyMapLayerArguements]]

@@ -24,7 +24,7 @@ from geo_assistant.logging import get_logger
 
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
-from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated
+from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated, SaveTable
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
 
@@ -371,11 +371,24 @@ class _PlotlyMapLayerStep(_ReportingStep):
             color=self.color
         )
     
+
+class _SaveTable(_ReportingStep):
+    _type: SkipJsonSchema[Literal["saveTable"]] = "saveTable"
+    source_table: _SourceTable
+
+    def export(self):
+        schema, table = self.source_table.split('.')
+        return SaveTable(
+            table=table,
+            schema=schema
+        )
+    
 # List of default steps to be used if not specified else
 DEFAULT_STEP_TYPES = [
     _AggregateStep,
     _FilterStep,
     _MergeStep,
     _BufferStep,
-    _PlotlyMapLayerStep
+    _PlotlyMapLayerStep,
+    _SaveTable
 ]

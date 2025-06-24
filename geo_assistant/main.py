@@ -9,6 +9,9 @@ from geo_assistant.agent._agent import GeoAgent
 from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
 from sqlalchemy import create_engine
 from geo_assistant.config import Configuration
+from geo_assistant.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # 1) Create the FastAPI app
@@ -37,6 +40,7 @@ async def websocket_endpoint(ws: WebSocket):
         while True:
             raw = await ws.receive_text()
             data = json.loads(raw)
+            logger.info(f"Message recieved: {raw}")
 
             # only handle user messages
             if data.get("type") != "user":

@@ -104,8 +104,8 @@ class PlotlyMapHandler:
         """
         Removes a layer from the map
         """
-        del self.map_layers[layer_id]
-        del self._layer_filters[layer_id]
+        self.map_layers.pop(layer_id)
+        self._layer_filters.pop(layer_id)
         logger.debug(f"Removed layer: {layer_id}")
         return f"Layer {layer_id} removed from the map"
 
@@ -139,6 +139,8 @@ class PlotlyMapHandler:
             if layers:
                 logger.info(layers)
                 layout_kwargs["map_layers"] = layers
+            else:
+                layout_kwargs["map_layers"] = []
 
             self.figure.update_layout(**layout_kwargs)
         return self.figure

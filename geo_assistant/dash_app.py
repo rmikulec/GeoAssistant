@@ -177,7 +177,6 @@ def create_dash_app(server, initial_figure):
                 log.append(html.Div(txt, className="chat-message assistant-message"))
             elif typ == "figure_update":
                 figure = json.loads(payload.get("figure"))
-                logger.info(figure['layout'])
                 return no_update, no_update, no_update, figure
             else:
                 # fallback for other event types

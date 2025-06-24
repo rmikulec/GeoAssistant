@@ -258,14 +258,13 @@ class GeoAgent:
                         op=filter_details['operator'],
                     ))
                 table = self.registry[('table', kwargs['table'])][0]
-                if self.socket_emit:
-                    map_json = self.map_handler.update_figure().to_json()
-                    await self.socket_emit(
-                        {
-                            "type": "figure_update",
-                            "figure": map_json
-                        }
-                    )
+                self.map_handler._add_map_layer(
+                    table=table,
+                    layer_id=kwargs['layer_id'],
+                    filters=filters,
+                    style=kwargs['style'],
+                    color=kwargs['color']
+                )
                 # Run the function with the new filter arg injected
                 try:
                     kwargs['filters'] = filters
@@ -301,6 +300,14 @@ class GeoAgent:
     
         # Recall openai if any tool calls were made for a user-friendly resposne
         if made_tool_calls:
+            if self.socket_emit:
+                map_json = self.map_handler.update_figure().to_json()
+                await self.socket_emit(
+                    {
+                        "type": "figure_update",
+                        "figure": map_json
+                    }
+                )
             res = await self.client.responses.create(
                 model=self.model,
                 input=self.messages,
@@ -379,7 +386,7 @@ class GeoAgent:
             text_format=DynGISModel
         )
         analysis = res.output_parsed
-        logger.debug(analysis.model_dump_json(indent=2))
+        logger.info(analysis.model_dump_json(indent=2))
         # Run through the steps, executing each query
         logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
 
@@ -390,7 +397,7 @@ class GeoAgent:
             for item in report.items:
                 if isinstance(item, TableCreated):
                     table = self.registry.register(
-                        id_=f"{analysis.name}.{item.table}",
+                        id_=f"{analysis.name}.{item.table_created}",
                         engine=self.engine
                     )
                     table._postprocess(self.engine)
