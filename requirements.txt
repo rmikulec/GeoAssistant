@@ -10,8 +10,11 @@ anyio==4.9.0
     # via
     #   httpx
     #   openai
+    #   starlette
 blinker==1.9.0
     # via flask
+cachelib==0.13.0
+    # via flask-caching
 certifi==2025.4.26
     # via
     #   httpcore
@@ -22,7 +25,9 @@ certifi==2025.4.26
 charset-normalizer==3.4.2
     # via requests
 click==8.2.1
-    # via flask
+    # via
+    #   flask
+    #   uvicorn
 colorlog==6.9.0
     # via -r requirements.in
 contourpy==1.3.2
@@ -33,14 +38,27 @@ dash==3.0.4
     # via
     #   -r requirements.in
     #   dash-bootstrap-components
+    #   dash-extensions
 dash-bootstrap-components==2.0.3
     # via -r requirements.in
+dash-extensions==2.0.4
+    # via -r requirements.in
+dataclass-wizard==0.35.0
+    # via dash-extensions
 distro==1.9.0
     # via openai
+editorconfig==0.17.1
+    # via jsbeautifier
 faiss-cpu==1.11.0
     # via -r requirements.in
+fastapi==0.115.13
+    # via -r requirements.in
 flask==3.0.3
-    # via dash
+    # via
+    #   dash
+    #   flask-caching
+flask-caching==2.3.1
+    # via dash-extensions
 fonttools==4.58.4
     # via matplotlib
 geoalchemy2==0.17.1
@@ -52,7 +70,9 @@ googlemaps==4.10.0
 gunicorn==23.0.0
     # via -r requirements.in
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   uvicorn
 httpcore==1.0.9
     # via httpx
 httpx==0.28.1
@@ -70,6 +90,8 @@ jinja2==3.1.6
     # via flask
 jiter==0.10.0
     # via openai
+jsbeautifier==1.15.4
+    # via dash-extensions
 kiwisolver==1.4.8
     # via matplotlib
 markupsafe==3.0.2
@@ -78,6 +100,8 @@ markupsafe==3.0.2
     #   werkzeug
 matplotlib==3.10.3
     # via -r requirements.in
+more-itertools==10.7.0
+    # via dash-extensions
 narwhals==1.42.1
     # via plotly
 nest-asyncio==1.6.0
@@ -117,6 +141,8 @@ pyarrow==20.0.0
 pydantic==2.11.7
     # via
     #   -r requirements.in
+    #   dash-extensions
+    #   fastapi
     #   openai
     #   pydantic-settings
 pydantic-core==2.33.2
@@ -151,6 +177,7 @@ shapely==2.1.1
     #   geopandas
 six==1.17.0
     # via
+    #   jsbeautifier
     #   python-dateutil
     #   retrying
 sniffio==1.3.1
@@ -161,11 +188,14 @@ sqlalchemy==2.0.41
     # via
     #   -r requirements.in
     #   geoalchemy2
+starlette==0.46.2
+    # via fastapi
 tqdm==4.67.1
     # via openai
 typing-extensions==4.14.0
     # via
     #   dash
+    #   fastapi
     #   openai
     #   pydantic
     #   pydantic-core
@@ -179,6 +209,10 @@ tzdata==2025.2
     # via pandas
 urllib3==2.4.0
     # via requests
+uvicorn==0.34.3
+    # via -r requirements.in
+websockets==15.0.1
+    # via -r requirements.in
 werkzeug==3.0.6
     # via
     #   dash

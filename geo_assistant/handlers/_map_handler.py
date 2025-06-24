@@ -135,7 +135,6 @@ class PlotlyMapHandler:
                 "map_bounds": self._global_bounds,
                 "map_center": center,
                 "map_zoom": zoom,
-                "uirevision":json.dumps(bounds) 
             }
             if layers:
                 logger.info(layers)

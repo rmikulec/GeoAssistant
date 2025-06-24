@@ -13,8 +13,8 @@ SELECT
     ST_Transform(l."{{ geometry_column }}", {{ srid }}),
     {{ srid }}
   )::Geometry({{ output_geometry_type }}, {{ srid }}) AS "{{ geometry_column }}"
-FROM "{{ left_table.source_schema }}"."{{ left_table.source_table }}"
-JOIN "{{ right_table.source_schema }}"."{{ right_table.source_table }}"
+FROM "{{ left_table.source_schema }}"."{{ left_table.source_table }}" AS l
+JOIN "{{ right_table.source_schema }}"."{{ right_table.source_table }}" AS r
 ON
 {%- if spatial_predicate | lower == 'dwithin' %}
   ST_DWithin(

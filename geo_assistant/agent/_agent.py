@@ -10,6 +10,7 @@ import pathlib
 import openai
 import json
 
+from fastapi import WebSocket
 from openai.types.responses import ParsedResponse
 from typing import Callable, Any
 from jinja2 import Template
@@ -86,7 +87,8 @@ class GeoAgent:
         field_store: FieldDefinitionStore = None,
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
-        use_smart_search: bool = False
+        use_smart_search: bool = False,
+        socket_emit: Callable = None
     ):
         self.model: str = model
         self.engine: Engine = engine
@@ -95,6 +97,7 @@ class GeoAgent:
         self.data_handler: PostGISHandler = data_handler
         self.client: openai.AsyncOpenAI = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
         self.registry: TableRegistry = TableRegistry.load_from_tileserv(self.engine)
+        self.socket_emit = socket_emit
 
         # Set the field store depending if given or not
         if field_store is None:
@@ -125,6 +128,11 @@ class GeoAgent:
             "run_analysis":     self.run_analysis
         }
 
+    def _set_websocket(self, websocket: WebSocket):
+        async def socket_emit(payload: dict):
+            # payload must be JSON-serializable
+            await websocket.send_text(json.dumps(payload))
+        self.socket_emit = socket_emit
 
     @property
     def conversation(self):
@@ -250,6 +258,14 @@ class GeoAgent:
                         op=filter_details['operator'],
                     ))
                 table = self.registry[('table', kwargs['table'])][0]
+                if self.socket_emit:
+                    map_json = self.map_handler.update_figure().to_json()
+                    await self.socket_emit(
+                        {
+                            "type": "figure_update",
+                            "figure": map_json
+                        }
+                    )
                 # Run the function with the new filter arg injected
                 try:
                     kwargs['filters'] = filters
@@ -293,6 +309,15 @@ class GeoAgent:
         ai_message = res.output_text
         logger.debug(f"LLM reply: {ai_message}")
         self.messages.append({'role': 'assistant', 'content': ai_message})
+
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "ai_message",
+                    "message": ai_message
+                }
+            )
+
         return ai_message
     
 
@@ -305,6 +330,14 @@ class GeoAgent:
         Args:
             - query(str): Text descibing what the analysis should accomplish
         """
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "analysis",
+                    "message": query,
+                    "progress": 0.0
+                }
+            )
         logger.info(f"Running analysis for query: {query}")
         # Setup the system message template
         system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
@@ -351,7 +384,7 @@ class GeoAgent:
 
         try:
             # Execute and gather the report
-            report = analysis.execute(self.engine)
+            report = await analysis.execute(self.engine)
             # Perform any actions required based on the report
             for item in report.items:
                 if isinstance(item, TableCreated):

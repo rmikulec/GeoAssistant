@@ -26,13 +26,13 @@ LOGGING_CONFIG = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "colored",
-            "level": "DEBUG",
+            "level": "INFO",
             "stream": "ext://sys.stdout",
         },
     },
     "root": {
         "handlers": ["console"],
-        "level": "DEBUG",
+        "level": "INFO",
     },
 }
 
