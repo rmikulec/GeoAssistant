@@ -1,8 +1,16 @@
+"""
+File contains logic / classes to build out Filter classes for OpenAI structured outputs
+
+This allows to creation of a json schema, complete with enums, for different types of WHERE
+    operations
+"""
+
+from abc import ABC
 from typing import Union, List
 from typing_extensions import Literal
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-# our shared literal of all operators
+# literal of all operators
 Operator = Literal[
     '=', '!=', '>', '<', '>=', '<=', 
     'IN', 'NOT IN', 
@@ -11,31 +19,36 @@ Operator = Literal[
     'IS NULL', 'IS NOT NULL'
 ]
 
-def _quote(val: Union[str, int, float]) -> str:
-    if isinstance(val, str):
-        # escape single quotes for CQL
-        escaped = val.replace("'", "''")
-        return f"'{escaped}'"
-    return str(val)
 
-class _FilterItem(BaseModel):
-    column: str = Field(..., description="Column name to filter")
+class _FilterItem(BaseModel, ABC):
+    """
+    Base Filter class, requiring an `operator` for each subclass, and providing an `alias`
+        field for each subclass
+
+    Base class also has a private build method to inject fields into a `column` model field
+    """
     operator: Operator = Field(..., description="Comparison operator")
+    column: str = Field(..., description="Column name to filter")
 
     # enable discriminated union on `operator`
     model_config = ConfigDict(discriminator='operator')
 
-    def to_cql(self) -> str:
-        """Fallback for filters without extra data"""
-        return f"{self.column} {self.operator}"
-
     @classmethod
     def _build_filter(cls, fields_enum):
+        """
+        Private method to inject Fields Enum into a `column` model field
+        """
         return create_model(
             cls.__name__.removeprefix('_'),
             __base__=cls,
             column=(fields_enum, ...)
         )
+
+"""
+Filter classes each for a different type of WHERE operation. To add more, extend the base
+    class and add to the list at the bottom
+"""
+
 
 class _ValueFilter(_FilterItem):
     operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE']
@@ -43,8 +56,6 @@ class _ValueFilter(_FilterItem):
         ..., description="Single value for comparisons"
     )
 
-    def to_cql(self) -> str:
-        return f"{self.column} {self.operator} {_quote(self.value)}"
 
 class _ListFilter(_FilterItem):
     operator: Literal['IN', 'NOT IN']
@@ -52,26 +63,16 @@ class _ListFilter(_FilterItem):
         ..., description="List of values for IN / NOT IN"
     )
 
-    def to_cql(self) -> str:
-        items = ", ".join(_quote(v) for v in self.value_list)
-        return f"{self.column} {self.operator} ({items})"
 
 class _BetweenFilter(_FilterItem):
     operator: Literal['BETWEEN']
     lower: Union[str, int, float]
     upper: Union[str, int, float]
 
-    def to_cql(self) -> str:
-        return (
-            f"{self.column} BETWEEN "
-            f"{_quote(self.lower)} AND {_quote(self.upper)}"
-        )
 
 class _NullFilter(_FilterItem):
     operator: Literal['IS NULL', 'IS NOT NULL']
 
-    def to_cql(self) -> str:
-        return f"{self.column} {self.operator}"
 
 # List of allowed filter types
 SQLFilters: list[type[_FilterItem]] = [

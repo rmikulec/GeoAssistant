@@ -1,3 +1,7 @@
+"""
+GeoAgent: An LLM-driven agent to manage a map and build/run GIS Analytics
+"""
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -9,16 +13,17 @@ import json
 from openai.types.responses import ParsedResponse
 from typing import Callable, Any
 from jinja2 import Template
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine
 
 from geo_assistant.handlers import MapHandler, DataHandler, GeoFilter
-from geo_assistant.agent.report import TableCreated, MapLayerCreated
+from geo_assistant.agent.report import TableCreated, PlotlyMapLayerArguements
 from geo_assistant.table_registry import TableRegistry
 from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
 from geo_assistant.config import Configuration
 
-from geo_assistant.agent._steps import _GISAnalysis, _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _AddMapLayer
+from geo_assistant.agent.analysis import _GISAnalysis
+from geo_assistant.agent._steps import _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _PlotlyMapLayerStep
 
 
 logger = get_logger(__name__)
@@ -50,6 +55,27 @@ class GeoAgent:
             GeoAgent. To use, must pass a user-message and a list of field definitions. Chat will
             then use OpenAI SDK to select proper filters (based on the field definitions) and
             answer the user in a conversational way
+        - run_analysis(query: str): Builds and runs a analysis by preplaning a variety of steps,
+            querying databases, and building a report to be interpreted by the agent or returned
+            to the user
+
+    Args:
+        engine (Engine): A sqlaclemeny engine for querying the database for info and running
+            analysis to build tables
+        map_handler (MapHandler): Class used to manage the state of a plotly map box
+        data_handler (DataHandler): Class used to quickly query the database for relevant info
+        field_store (FieldDefinitionStore): Field Definition Vector store to ensure relevant field
+            definitions are injected into the prompt on each run. If left blank, will default to
+            the version found in `geo_assistant.config`
+        info_store (SupplementalInfoStore): Info vector store to ensure relevant generic
+            information (usually parsed from a GIS dataset metadata pdf) is injected into the
+            prompt. If left blank, will default to the version found in `geo_assistant.config`
+        model (str): The name of the OpenAI model to use for inference. If left blank, will default
+            to the version found in `geo_assistant.config`
+        use_smart_search (bool): Flag to use a "smart search" feature. If true, this will enable
+            the agent to call OpenAI to generate keywords to search the vector stores with, rather
+            than relying on the base user message. The keywords generated use the entire
+            conversation as context, potentially catching tricker use cases. Defaults to False.
     """
 
     def __init__(
@@ -60,7 +86,7 @@ class GeoAgent:
         field_store: FieldDefinitionStore = None,
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
-        use_smart_search: bool = True
+        use_smart_search: bool = False
     ):
         self.model: str = model
         self.engine: Engine = engine
@@ -70,16 +96,19 @@ class GeoAgent:
         self.client: openai.AsyncOpenAI = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
         self.registry: TableRegistry = TableRegistry.load_from_tileserv(self.engine)
 
+        # Set the field store depending if given or not
         if field_store is None:
             self.field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
         else:
             self.field_store = field_store
         
+        # Set the info store depending if given or not
         if info_store is None:
             self.info_store = SupplementalInfoStore(version=Configuration.info_store_version)
         else:
             self.info_store = info_store
 
+        # Iniate a base system message (this will be updated each run of `chat`)
         self.messages = [
             {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
                     map_status="Graph not updated yet.",
@@ -88,6 +117,7 @@ class GeoAgent:
             }
         ]
 
+        # Set the tool handlers for any potential available tools
         self.tools: dict[str, Callable[..., Any]] = {
             "add_map_layer":    self.map_handler._add_map_layer,
             "remove_map_layer": self.map_handler._remove_map_layer,
@@ -98,6 +128,9 @@ class GeoAgent:
 
     @property
     def conversation(self):
+        """
+        A user-friendly export of the conversation so far, leaving out any `tool calls`
+        """
         conversation_str = ""
         for message in self.messages:
             if not isinstance(message, dict):
@@ -110,15 +143,21 @@ class GeoAgent:
         return conversation_str
     
 
-    def _update_dev_message(self):
+    def _update_dev_message(self, context: str):
+        """
+        Private function to update the current system message
+        """
         self.messages[0] = {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
                 map_status=json.dumps(self.map_handler.status,indent=2),
-                supplement_information=""
+                supplement_information=context
             )    
         }
     
 
     async def _get_field_defs(self, message: str, context: str = None, k: int = 5):
+        """
+        Private method to retrieve relevant field definitions from the vector store
+        """
         conversation = self.conversation + f"\n User: {message}"
         if self.use_smart_search:
             field_defs = await self.field_store.smart_query(
@@ -131,6 +170,7 @@ class GeoAgent:
             field_defs = await self.field_store.query(message, k=k)
         return field_defs
 
+
     async def chat(self, user_message: str) -> str:
         """
         Function used to 'chat' with the
@@ -140,19 +180,22 @@ class GeoAgent:
 
         Args:
             user_message(str): The message inputed by the user
-            field_defs(list[dict]): Field Definitions that can be used to filter the GeoDataframe
-                These can be obtained by querying the "FieldDefinitionStore"
         Returns:
             str: The message generated by the LLM to return to the user
         """
+        # Add the user message to the message log
         self.messages.append({'role': 'user', 'content': user_message})
         logger.debug(f"User message: {user_message}")
 
+        # Search info vector store and update dev message
         context_search = await self.info_store.query(user_message, k=3)
         context = "\n".join([result['markdown'] for result in context_search])
+        self._update_dev_message(context)
+        # Search the field vector store and pull out a list of tables
         field_defs = await self._get_field_defs(user_message, context)
         tables = list(self.map_handler._tileserv_index.keys())
-
+        # Build out available tools
+        # TODO: Make this more robust and easier to add tools in the workflow
         tool_defs = [
             tools._build_add_layer_def(
                 tables=tables,
@@ -163,26 +206,33 @@ class GeoAgent:
             tools._build_run_analysis()
         ]
 
+        # Call openai
         res = await self.client.responses.create(
             model=self.model,
             input=self.messages,
             tools=tool_defs
         )
 
+        # Tool call loop:
+        #   for each tool, extract args and make appropriate calls, keeping track of messages
+        #   and proprely handling errors
         made_tool_calls = False
         for tool_call in res.output:
+            # Validate that a tool was called
             self.messages.append(tool_call)
             if tool_call.type != "function_call":
                 continue
-
             made_tool_calls = True
-            kwargs = json.loads(tool_call.arguments)
 
+            # Extract info from call content
+            kwargs = json.loads(tool_call.arguments)
             logger.debug(f"Calling {tool_call.name} with kwargs: {kwargs}")
 
-
+            # Special case for adding a layer to the map
+            #   CQL filters must be build out before adding
             if tool_call.name == "add_map_layer":   
                 # Extract filters from the kwargs
+                # TODO: Clean up this logic to be less-convoluted
                 filter_names = [
                     name
                     for name in kwargs.keys()
@@ -206,14 +256,20 @@ class GeoAgent:
                     tool_response = f"{self.data_handler.filter_count(filters)} parcels found"
                 except Exception as e:
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
+            # Seperated to explicilty call asyncronhously
             elif tool_call.name == "run_analysis":
-                tool_response = await self.run_analysis(**kwargs)
+                try:
+                    tool_response = await self.run_analysis(**kwargs)
+                except Exception as e:
+                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             else:
                 try:
                     tool_response = self.tools[tool_call.name](**kwargs)
                 except Exception as e:
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
+            # Update all data
             logger.debug(f"Tool Response: {tool_response}")
+            # dev message should be updated with latest status of the map
             self._update_dev_message()
             self.messages.append({
                 "type": "function_call_output",
@@ -221,6 +277,7 @@ class GeoAgent:
                 "output": tool_response
             })
     
+        # Recall openai if any tool calls were made for a user-friendly resposne
         if made_tool_calls:
             res = await self.client.responses.create(
                 model=self.model,
@@ -255,7 +312,7 @@ class GeoAgent:
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
-            steps=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _AddMapLayer],
+            step_types=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _PlotlyMapLayerStep],
             fields=field_names,
             tables=[table.name for table in tables]
         )
@@ -297,7 +354,7 @@ class GeoAgent:
                         engine=self.engine
                     )
                     table._postprocess(self.engine)
-                elif isinstance(item, MapLayerCreated):
+                elif isinstance(item, PlotlyMapLayerArguements):
                     self.map_handler._add_map_layer(
                         table=item.source_table,
                         layer_id=item.layer_id,
@@ -307,20 +364,12 @@ class GeoAgent:
                     logger.warning(
                         f"Report item type {type(item)} handler not implemented"
                     )
-        except Exception as e:
-            raise e
         finally:
             # No matter what, drop all the tables but the last possible
             if len(analysis.output_tables) > 1:
-                tables_to_drop = analysis.output_tables[: (len(analysis._tables_created) - 1)]
-                logger.debug(f"Dropping tables: {tables_to_drop}")
-                """
-                execute_template_sql(
-                    engine=self.engine,
-                    template_name="drop",
-                    output_tables=tables_to_drop
-                )
-                """
+                for table in analysis._final_tables:
+                    logger.debug(f"Dropping {table}...")
+                    table = self.registry[('table', table)][0]._drop(self.engine)
                 
         return (
             f"GIS Analysis complete."
