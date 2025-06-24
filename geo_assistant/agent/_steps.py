@@ -1,7 +1,7 @@
 import uuid
 from enum import Enum
 from typing import Type, Self, Literal, Optional, Union, get_args
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
@@ -41,7 +41,7 @@ GeometryType = Literal[
 
 
 class _SourceTable(BaseModel):
-    outout_table_idx: Optional[int] = Field(description="If using the output of a previous step, supply the index here")
+    output_table_idx: Optional[int] = Field(description="If using the output of a previous step, supply the index here")
     source_table: Optional[str] = Field(description="The name of the source table to pull data from")
 
     @classmethod
@@ -155,8 +155,8 @@ class _SQLStep(_GISAnalysisStep):
         for field, info in self.__class__.model_fields.items():
             if info.annotation.__name__ == "SourceTable":
                 source_table: _SourceTable = getattr(self, field)
-                if source_table.outout_table_idx:
-                    table_args[field] = output_tables[source_table.outout_table_idx]
+                if source_table.output_table_idx:
+                    table_args[field] = output_tables[source_table.output_table_idx]
                 else:
                     table_args[field] = source_table.source_table.value
         
@@ -374,7 +374,22 @@ class _GISAnalysis(BaseModel):
             if issubclass(step.__class__, _ReportingStep)
         ]
 
-    
+    @model_validator(mode="after")
+    def _fill_in_source_tables(self):
+        """
+        Validator updates *any* field in *any* step that is a source table to have a string value,
+            in the form of {schema}.{table}
+        """
+        for step in self.steps:
+            for field, info in step.__class__.model_fields.items():
+                if issubclass(info.annotation, _SourceTable):
+                    value: _SourceTable = getattr(step, field)
+                    if value.output_table_idx:
+                        new_value = f"{self.name}.{self.output_tables[value.output_table_idx]}"
+                    else:
+                        new_value = f"{Configuration.db_base_schema}.{value.source_table.value}"
+                    setattr(step, field, new_value)
+        return self
 
     def execute(self, engine: Engine) -> GISReport:
         items = []
@@ -387,8 +402,8 @@ class _GISAnalysis(BaseModel):
                 items.append(step._execute(engine, self.name, self.output_tables))
             elif isinstance(step, _AddMapLayer):
                 layer_created_item = step.export()
-                if step.source_table.outout_table_idx:
-                    layer_created_item.source_table = "public." + self.output_tables[step.source_table.outout_table_idx]
+                if step.source_table.output_table_idx:
+                    layer_created_item.source_table = "public." + self.output_tables[step.source_table.output_table_idx]
                 else:
                     print(step.source_table.source_table)
                     layer_created_item.source_table = "public."+step.source_table.source_table.value
