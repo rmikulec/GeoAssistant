@@ -5,6 +5,9 @@ from sqlalchemy import text
 from jinja2 import Template
 
 
+from geo_assistant.logging import get_logger
+logger = get_logger(__name__)
+
 TEMPATE_PATH = pathlib.Path(__file__).resolve().parent / "templates"
 
 def execute_template_sql(
@@ -30,7 +33,7 @@ def execute_template_sql(
     )
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
-
+    logger.debug(sql)
     # 3) Execute
     # If it's an Engine, open a connection + transaction
     if isinstance(engine, Engine):

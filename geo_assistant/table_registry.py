@@ -4,16 +4,23 @@ from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import ProgrammingError
 
+from geo_assistant.logging import get_logger
 from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.config import Configuration
+
+logger = get_logger(__name__)
 
 
 class Table(BaseModel):
     name: str
     schema: str
-    geometry_type: str
     columns: list[str]
-    url: str
+    index_url: str
+    tile_url: str
+    bounds: dict[str, float]
+    
+    #Set later after creation
+    geometry_type: str = None
 
     def filter(self, fields: list[str]) -> Self:
         new_table = self.model_copy()
@@ -32,20 +39,10 @@ class Table(BaseModel):
         execute_template_sql(
             engine=engine,
             template_name="drop",
-            output_tables=[self.name]
+            schema_name=self.schema,
+            table_name=self.name
         )
-    
-    def _create_spatial_index(self, engine: Engine):
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    f'CREATE INDEX IF NOT EXISTS "{self.schema}".{self.name}_geometry_gist_idx ON "public"."{self.name}" USING GIST (geometry);'
 
-                )
-            )
-            conn.execute(
-                text(f'ANALYZE "{self.schema}"."{self.name}"')
-            )
     
     def _postprocess(self, engine: Engine):
         """
@@ -53,21 +50,12 @@ class Table(BaseModel):
         then grant/select, add GIST index, and analyze.
         """
 
-        # 2) grant, index, analyze
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    (
-                        "SELECT Populate_Geometry_Columns("
-                        f"'{self.schema}.{self.name}'::regclass"
-                        ");"
-                    )
-                )
-            )
-            conn.execute(
-                text(f"GRANT SELECT ON {self.schema}.{self.name} TO public")
-            )
-
+        execute_template_sql(
+            engine=engine,
+            template_name="postprocess",
+            schema=self.schema,
+            table=self.name
+        )
 
 class TableRegistry:
 
@@ -118,6 +106,42 @@ class TableRegistry:
             except ProgrammingError:
                 return "NotFound"
 
+
+    @staticmethod
+    def _extract_table_from_tileserv(
+        index_info: dict,
+        metadata: dict,
+    ) -> Table:
+        if "properties" in metadata:
+            columns = [prop['name'] for prop in metadata['properties']]
+        else:
+            columns = []
+
+        if "bounds" in metadata:
+            bounds_data = metadata['bounds']
+            bounds = {
+                "west": bounds_data[0],
+                "south": bounds_data[1],
+                "east":  bounds_data[2],
+                "north": bounds_data[3],
+            }
+        else:
+            bounds = {
+                "west": -90,
+                "south": -180,
+                "east":  90,
+                "north": 180,
+            }
+
+        return Table(
+            name=index_info['name'],
+            schema=index_info['schema'],
+            index_url=index_info['detailurl'],
+            tile_url=metadata['tileurl'],
+            columns=columns,
+            bounds=bounds
+        )
+
     @classmethod
     def load_from_tileserv(cls, engine: Engine) -> Self:
         index = requests.get(
@@ -129,53 +153,60 @@ class TableRegistry:
             metadata = requests.get(
                 info['detailurl']
             ).json()
-            if "properties" in metadata:
-                columns = [prop['name'] for prop in metadata['properties']]
-            else:
-                columns = []
-            instance.tables[id_] = Table(
-                name=info['name'],
+            table = cls._extract_table_from_tileserv(
+                info, metadata
+            )
+            table.geometry_type = cls._get_geometry_type(
+                engine=engine,
                 schema=info['schema'],
-                url=info['detailurl'],
-                geometry_type=cls._get_geometry_type(
+                table=info['name'],
+            )
+            instance.tables[id_] = table
+        return instance
+    
+
+    def sync_tileserv(self, engine: Engine) -> Self:
+        index = requests.get(
+            f"{Configuration.pg_tileserv_url}/index.json"
+        ).json()
+
+        for id_, info in index.items():
+            if id_ not in self.tables:
+                metadata = requests.get(
+                    info['detailurl']
+                ).json()
+                table = self._extract_table_from_tileserv(
+                    info, metadata
+                )
+                table.geometry_type = self._get_geometry_type(
                     engine=engine,
                     schema=info['schema'],
                     table=info['name'],
-                ),
-                columns=columns
-            )
-        
-        return instance
+                )
+                self.tables[id_] = table
 
 
-    def register(self, name: str, engine: Engine) -> Table:
+    def register(self, id_: str, engine: Engine) -> Table:
         # Search index:
         index = requests.get(
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
-        
 
-        for id_, info in index.items():
-            if info['name'] == name:
-                metadata = requests.get(
-                    info['detailurl']
-                ).json()
-                if "properties" in metadata:
-                    columns = [prop['name'] for prop in metadata['properties']]
-                else:
-                    columns = []
-                self.tables[id_] = Table(
-                    name=info['name'],
-                    schema=info['schema'],
-                    url=info['detailurl'],
-                    geometry_type=self._get_geometry_type(
-                        engine=engine,
-                        schema=info['schema'],
-                        table=info['name'],
-                    ),
-                    columns=columns
-                )
-                return self.tables[id_]
+        info = index[id_]
+        metadata = requests.get(
+            info['detailurl']
+        ).json()
+        table = self._extract_table_from_tileserv(
+            info, metadata
+        )
+        table.geometry_type = self._get_geometry_type(
+            engine=engine,
+            schema=info['schema'],
+            table=info['name'],
+        )
+        self.tables[id_] = table
+    
+        return self.tables[id_]
 
     def unregister(self, name: str, engine: Engine):
         for id_, table in self.tables.items():
@@ -185,9 +216,10 @@ class TableRegistry:
                 return
     
     def cleanup(self, engine: Engine):
-        for temp_id in self.temp_tables:
-            self.tables[temp_id]._drop(engine)
-            del self.tables[temp_id]
+        for schema in self.schemas:
+            if schema != Configuration.db_base_schema:
+                logger.info(f"Dropping schema: {schema}")
+                self.drop_schema(engine, schema)
 
 
     def __getitem__(self, key) -> list[Table]:

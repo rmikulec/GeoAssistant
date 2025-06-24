@@ -63,6 +63,11 @@ class _SourceTable(BaseModel):
     """
     output_table_idx: Optional[int] = Field(description="If using the output of a previous step, supply the index here")
     source_table: Optional[str] = Field(description="The name of the source table to pull data from")
+    source_schema: SkipJsonSchema[Optional[str]] = Field(default=None)
+
+
+    def __str__(self):
+        return f"{self.source_schema}.{self.source_table}"
 
     @classmethod
     def _build_model(cls, tables_enum: type[Enum]):
@@ -181,7 +186,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
             # Gather distinct geometry types
             results = [
                 conn.execute(
-                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
+                    text(f'SELECT DISTINCT GeometryType({geometry_column}) FROM "{table.source_schema}"."{table.source_table}"')
                 )
                 for table in tables
             ]
@@ -250,7 +255,7 @@ class _FilterStep(_SQLStep):
             filters=(filters_union, ...)
         )
     
-    def _execute(self, engine: Engine, schema: str, output_tables: list[str]):
+    def _execute(self, engine: Engine, schema: str):
         """
         Needs a special execute function to ensure that all filters are sql-safe
         """
@@ -272,7 +277,7 @@ class _FilterStep(_SQLStep):
             if hasattr(f, "upper") and isinstance(f.upper, str):
                 f.upper = f"'{f.upper}'"
 
-        return super()._execute(engine, schema, output_tables)
+        return super()._execute(engine, schema)
 
 class _MergeStep(_SQLStep):
     """
@@ -363,7 +368,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
             name=self.name,
             layer_id=self.layer_id,
             reason=self.reasoning,
-            source_table=self.source_table,
+            source_table=str(self.source_table),
             color=self.color
         )
     

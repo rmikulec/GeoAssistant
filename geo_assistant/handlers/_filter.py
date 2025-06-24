@@ -2,14 +2,19 @@ from pydantic import BaseModel
 from typing import Any, Literal
 from urllib.parse import quote
 
-class GeoFilter(BaseModel):
+class HandlerFilter(BaseModel):
+    """
+    Filters that can be used / exported as either a sql command or cql statement
+    """
     field: str
     value: Any
     op: Literal["equal", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual", "notEqual", "contains"]
-    table: str
 
 
     def _to_cql(self):
+        """
+        Exports filter as a url-safe cql statement
+        """
         op_mapping = {
             "equal": "=",
             "greaterThan": ">",
@@ -37,13 +42,15 @@ class GeoFilter(BaseModel):
             literal = str(value)
 
         # build the raw CQL expression
-
         expr = f"{self.field} {cql_op} {literal}"
 
         # URL-encode it (spaces → %20, quotes → %27, etc.)
         return quote(expr, safe="")
     
     def _to_sql(self):
+        """
+        Exports the filter as a SQL WHERE clause
+        """
         op_mapping = {
             "equal": "=",
             "greaterThan": ">",

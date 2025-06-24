@@ -1,7 +1,7 @@
 {# templates/filter_step.sql.j2 #}
-DROP TABLE IF EXISTS {{ schema }}.{{ output_table }};
+DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
-CREATE TABLE {{ schema }}.{{ output_table }} AS
+CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
 SELECT
 {%- for col in select_columns %}
   "{{ col.value }}",
@@ -10,7 +10,7 @@ SELECT
     ST_Transform("{{ geometry_column }}", {{ srid }}),
     {{ srid }}
   )::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
-FROM {{ source_table }}
+FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 {% if filters %}
 WHERE
 {% for f in filters %}

@@ -42,7 +42,8 @@ class _GISAnalysis(BaseModel):
     name: str = Field(description="Snake case name of the analysis")
     steps: list[_GISAnalysisStep]
     #Private variables to not be exposed by pydantic, but used for running the analysis
-    _final_tables = SkipJsonSchema[list[str]]
+    final_tables: SkipJsonSchema[list[str]] = Field(default_factory=list)
+    tables_created: SkipJsonSchema[list[str]] = Field(default_factory=list)
 
     @classmethod
     def build_model(
@@ -92,7 +93,7 @@ class _GISAnalysis(BaseModel):
     
 
     @property
-    def output_tables(self) -> list[str]:
+    def output_tables(self) -> list[_SourceTable]:
         """
         List of all the tables that are / will be created when executing analysis
         """
@@ -127,24 +128,36 @@ class _GISAnalysis(BaseModel):
     @model_validator(mode="after")
     def _fill_in_source_tables(self):
         """
-        Validator updates *any* field in *any* step that is a source table to have a string value,
-            in the form of {schema}.{table}
+        Validator updates *any* field in *any* step that is a source table to:
+            - If it has an `output_table_idx` value -> Fill in source_table and source_schema
+                where source_schema is the name of the analysis
+            - If it does not have a `output_table_idx` -> Fill in the source_schema as the
+                default defined in `geo_assistant.config`
         """
         # While filling in sources, keep track of any tables that should avoid being immediately
         #   dropped. These are any tables that are used as a source in a `_ReportingStep`
-        final_tables = []
         for step in self.steps:
             for field, info in step.__class__.model_fields.items():
-                if issubclass(info.annotation, _SourceTable):
+                ann = info.annotation
+                if isinstance(ann, type) and issubclass(ann, _SourceTable):
                     value: _SourceTable = getattr(step, field)
-                    if value.output_table_idx:
-                        new_value = f"{self.name}.{self.output_tables[value.output_table_idx]}"
-                        if issubclass(step, _ReportingStep):
-                            final_tables.append(new_value)
+                    if value.output_table_idx is not None:
+                        new_value = _SourceTable(
+                            source_table=self.output_tables[value.output_table_idx],
+                            source_schema=self.name,
+                            output_table_idx=None
+                        )
+                        # If the table is also included in a ReportingStep, then it is considered
+                        #   'final' and should not be dropped on analysis completion
+                        if issubclass(step.__class__, _ReportingStep):
+                            self.final_tables.append(str(new_value))
                     else:
-                        new_value = f"{Configuration.db_base_schema}.{value.source_table.value}"
+                        new_value = _SourceTable(
+                            source_table=value.source_table.value,
+                            source_schema=Configuration.db_base_schema,
+                            output_table_idx=None
+                        )
                     setattr(step, field, new_value)
-        self._final_tables = final_tables
         return self
 
     def execute(self, engine: Engine) -> GISReport:
@@ -166,8 +179,8 @@ class _GISAnalysis(BaseModel):
         with engine.begin() as conn:
             sql = text(
                 (
-                    f"CREATE SCHEMA IF NOT EXISTS {self.name} AUTHORIZATION pg_database_owner;"
-                    f"GRANT USAGE ON SCHEMA {self.name} TO pg_database_owner;"
+                    f"CREATE SCHEMA IF NOT EXISTS {self.name} AUTHORIZATION {Configuration.db_tileserv_role};"
+                    f"GRANT USAGE ON SCHEMA {self.name} TO {Configuration.db_tileserv_role};"
                 )
             )
             conn.execute(sql)
@@ -179,7 +192,8 @@ class _GISAnalysis(BaseModel):
 
             if isinstance(step, _SQLStep):
                 try:
-                    items.append(step._execute(engine, self.name, self.output_tables))
+                    items.append(step._execute(engine, self.name))
+                    self.tables_created.append(f"{self.name}.{step.output_table}")
                 except Exception as e:
                     raise AnalysisSQLStepFailed(
                         analysis_name=self.name,
