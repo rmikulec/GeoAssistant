@@ -1,9 +1,9 @@
 {# templates/aggregate.sql.j2 #}
 -- drop any existing
-DROP TABLE IF EXISTS {{ schema }}.{{ output_table }};
+DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
 -- create with proper geometry typmod & SRID baked in
-CREATE TABLE {{ schema }}.{{ output_table }} AS
+CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
 SELECT
 {% for agg in aggregators -%}
   {%- if agg.operator == 'COUNT' -%}
@@ -24,7 +24,7 @@ SELECT
     {{ srid }}
   )::Geometry({{ gtype }}, {{ srid }})
   AS "{{ geometry_column }}"
-FROM {{ source_table }}
+FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 {% if group_by %}
 GROUP BY
   {%- for col in group_by -%}

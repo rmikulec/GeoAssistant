@@ -22,6 +22,7 @@ class DefaultConfiguration(BaseSettings):
     db_port: int = Field(default=5432)
     db_connection_url: str = Field(default="")
     db_base_schema: str = Field(default="base")
+    db_tileserv_role: str = Field(default="pg_database_owner")
     
     #Other
     geometry_column: str = Field(default="geometry")

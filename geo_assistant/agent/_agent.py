@@ -378,13 +378,14 @@ class GeoAgent:
                     )
         finally:
             # No matter what, drop all the tables but the last possible
-            if len(analysis.output_tables) > 1:
-                for table in analysis.tables_created:
-                    if table not in analysis.final_tables:
-                        logger.debug(f"Dropping {table}...")
-                        schema, table = item.source_table.split('.')
-                        self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-                
+            logger.debug(analysis.tables_created)
+            logger.debug(analysis.final_tables)
+            self.registry.sync_tileserv(self.engine)
+            for table_name in analysis.tables_created:
+                if table_name not in analysis.final_tables:
+                    logger.info(f"Dropping {table_name}...")
+                    self.registry[('schema', analysis.name), ('table', table_name)][0]._drop(self.engine)
+            
         return (
             f"GIS Analysis complete."
             f"Report description:"
