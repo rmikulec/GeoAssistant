@@ -250,7 +250,7 @@ class _FilterStep(_SQLStep):
             filters=(filters_union, ...)
         )
     
-    def _execute(self, engine: Engine, schema: str, output_tables: list[str]):
+    def _execute(self, engine: Engine, schema: str):
         """
         Needs a special execute function to ensure that all filters are sql-safe
         """
@@ -272,7 +272,7 @@ class _FilterStep(_SQLStep):
             if hasattr(f, "upper") and isinstance(f.upper, str):
                 f.upper = f"'{f.upper}'"
 
-        return super()._execute(engine, schema, output_tables)
+        return super()._execute(engine, schema)
 
 class _MergeStep(_SQLStep):
     """

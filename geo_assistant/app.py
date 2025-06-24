@@ -147,4 +147,7 @@ def send_message(n_clicks, new_message, existing_log, existing_fig):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8050)
+    try:
+        app.run(host="0.0.0.0", port=8050)
+    finally:
+        agent.registry.cleanup(agent.engine)

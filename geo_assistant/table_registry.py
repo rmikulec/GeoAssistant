@@ -4,8 +4,11 @@ from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import ProgrammingError
 
+from geo_assistant.logging import get_logger
 from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.config import Configuration
+
+logger = get_logger(__name__)
 
 
 class Table(BaseModel):
@@ -214,9 +217,10 @@ class TableRegistry:
                 return
     
     def cleanup(self, engine: Engine):
-        for temp_id in self.temp_tables:
-            self.tables[temp_id]._drop(engine)
-            del self.tables[temp_id]
+        for schema in self.schemas:
+            if schema != Configuration.db_base_schema:
+                logger.info(f"Dropping schema: {schema}")
+                self.drop_schema(engine, schema)
 
 
     def __getitem__(self, key) -> list[Table]:
