@@ -195,7 +195,7 @@ class _GISAnalysis(BaseModel):
                         "type": "analysis",
                         "message": step.reasoning,
                         "id": id_,
-                        "progress": float(i)/len(self.steps)
+                        "progress": float(i+1)/len(self.steps)
                     }
                 )
 

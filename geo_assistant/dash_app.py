@@ -163,7 +163,7 @@ def create_dash_app(server, initial_figure):
                     if getattr(child, "props", {}).get("id") == div_id),
                     None
                 )
-
+                logger.info(f"Existing id: {existing_idx}")
                 new_div = html.Div(children, id=div_id, className="chat-message assistant-message")
 
                 if existing_idx is not None:

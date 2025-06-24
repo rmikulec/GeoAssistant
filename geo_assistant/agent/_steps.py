@@ -282,7 +282,7 @@ class _MergeStep(_SQLStep):
     """
     SQL Step to run a basic `JOIN` clause
     """
-    _type: SkipJsonSchema[Literal['merge']] = "merge"
+    _type: Literal['merge'] = "merge"
     left_select: list[_Field]
     right_select: list[_Field]
     left_table: _SourceTable
@@ -305,7 +305,7 @@ class _AggregateStep(_SQLStep):
     """
     SQL Step to run a basic `GROUP BY` clause
     """
-    _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
+    _type: Literal['aggregate'] = "aggregate"
     select: list[_Field]
     source_table: _SourceTable
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
@@ -343,7 +343,7 @@ class _BufferStep(_SQLStep):
     """
     SQL Step to run a GIS Buffer analysis
     """
-    _type: SkipJsonSchema[Literal['buffer']] = "buffer"
+    _type: Literal['buffer'] = "buffer"
     source_table: _SourceTable
     buffer_distance: float = Field(..., description="Distance to buffer")
     buffer_unit: Literal['meters','kilometers'] = Field(
@@ -356,7 +356,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
     """
     Reporting step to export data as a Plotly Map Layer
     """
-    _type: SkipJsonSchema[Literal["addLayer"]] = "addLayer"
+    _type: Literal["addLayer"] = "addLayer"
     source_table: _SourceTable
     layer_id: str = Field(description="The id of the new map layer")
     color: str = Field(description="Hex value of the color of the geometries")
@@ -373,7 +373,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
     
 
 class _SaveTable(_ReportingStep):
-    _type: SkipJsonSchema[Literal["saveTable"]] = "saveTable"
+    _type: Literal["saveTable"] = "saveTable"
     source_table: _SourceTable
 
     def export(self):

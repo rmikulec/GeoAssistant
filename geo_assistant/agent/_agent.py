@@ -344,7 +344,7 @@ class GeoAgent:
                     "type": "analysis",
                     "id": analysis_id,
                     "message": query,
-                    "progress": 0.0
+                    "progress": 1
                 }
             )
         logger.info(f"Running analysis for query: {query}")
@@ -392,7 +392,11 @@ class GeoAgent:
 
         try:
             # Execute and gather the report
-            report = await analysis.execute(analysis_id, self.engine)
+            report = await analysis.execute(
+                id_=analysis_id, 
+                engine=self.engine, 
+                socket_emit=self.socket_emit
+            )
             # Perform any actions required based on the report
             for item in report.items:
                 if isinstance(item, TableCreated):
@@ -427,7 +431,15 @@ class GeoAgent:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
                     self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-            
+            if self.socket_emit:
+                await self.socket_emit(
+                    {
+                        "type": "Report Complete",
+                        "id": analysis_id,
+                        "message": query,
+                        "progress": 1
+                    }
+                )
         return (
             f"GIS Analysis ran succussfully."
             f"Report description:"
