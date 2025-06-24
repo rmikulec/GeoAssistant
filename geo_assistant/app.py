@@ -1,9 +1,8 @@
 import dash
-import json
-import math
 from geo_assistant.logging import get_logger
 import asyncio
-import plotly.graph_objects as go
+from flask import Flask
+from flask_socketio import SocketIO
 from sqlalchemy import create_engine
 from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
@@ -17,7 +16,10 @@ from geo_assistant.config import Configuration
 logger = get_logger(__name__)
 # Set up app
 engine = create_engine(url=Configuration.db_connection_url)
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
+server = Flask(__name__)
+# allow CORS so the Dash front-end can connect
+socketio = SocketIO(server, cors_allowed_origins="*")
+app = dash.Dash(__name__, server=server, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME])
 server = app.server
 
 
