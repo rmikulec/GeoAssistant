@@ -144,7 +144,7 @@ class PlotlyMapHandler:
         return self.figure
 
     @property
-    def status(self):
+    def status(self) -> dict:
         """
         Status so far consists of a readable dict, of all the layers and their filters on the map
         """
