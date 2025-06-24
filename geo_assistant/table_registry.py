@@ -185,27 +185,25 @@ class TableRegistry:
         return instance
 
 
-    def register(self, name: str, engine: Engine) -> Table:
+    def register(self, id_: str, engine: Engine) -> Table:
         # Search index:
         index = requests.get(
             f"{Configuration.pg_tileserv_url}/index.json"
         ).json()
-        
 
-        for id_, info in index.items():
-            if info['name'] == name:
-                metadata = requests.get(
-                    info['detailurl']
-                ).json()
-                table = self._extract_table_from_tileserv(
-                    info, metadata
-                )
-                table.geometry_type = self._get_geometry_type(
-                    engine=engine,
-                    schema=info['schema'],
-                    table=info['name'],
-                )
-                self.tables[id_] = table
+        info = index[id_]
+        metadata = requests.get(
+            info['detailurl']
+        ).json()
+        table = self._extract_table_from_tileserv(
+            info, metadata
+        )
+        table.geometry_type = self._get_geometry_type(
+            engine=engine,
+            schema=info['schema'],
+            table=info['name'],
+        )
+        self.tables[id_] = table
     
         return self.tables[id_]
 

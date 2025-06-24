@@ -46,16 +46,3 @@ When referencing another table, ONLY these values and the `output_table` of a pr
   - {{ table.name }} 
     - Geometry Type {{ table.geometry_type }}
 {% endfor %}
-
-### Output Schema
-
-```json
-{
-  "steps": [
-    {
-      "type": "<StepType>",
-      // step-specific parameters
-    }
-    // additional steps...
-  ]
-}

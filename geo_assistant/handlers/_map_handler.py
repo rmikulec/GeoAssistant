@@ -153,14 +153,12 @@ class PlotlyMapHandler:
 
         for layer_id, layer in self.map_layers.items():
             filters = self._layer_filters[layer_id]
-            layers.append(
-                {
-                    "id": layer_id,
-                    "color": layer['color'],
-                    "style": layer['type'],
-                    "filters": [filter_.model_dump() for filter_ in filters]
-                }
-
-            )
-        
+            layer_json = {
+                "id": layer_id,
+                "color": layer['color'],
+                "style": layer['type'],
+            }
+            if filters:
+                layer_json["filters"]= [filter_.model_dump() for filter_ in filters]
+            layers.append(layer_json)
         return layers

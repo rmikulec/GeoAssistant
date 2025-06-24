@@ -356,13 +356,17 @@ class GeoAgent:
             for item in report.items:
                 if isinstance(item, TableCreated):
                     table = self.registry.register(
-                        name=item.table,
+                        id_=f"{analysis.name}.{item.table}",
                         engine=self.engine
                     )
                     table._postprocess(self.engine)
                 elif isinstance(item, PlotlyMapLayerArguements):
                     logger.info(item)
-                    table = self.registry[('table', item.source_table.split('.')[0])][0]
+                    schema, table = item.source_table.split('.')
+                    table = self.registry[
+                        ('schema', schema),
+                        ('table', table)
+                    ][0]
                     self.map_handler._add_map_layer(
                         table=table,
                         layer_id=item.layer_id,
@@ -378,7 +382,8 @@ class GeoAgent:
                 for table in analysis.tables_created:
                     if table not in analysis.final_tables:
                         logger.debug(f"Dropping {table}...")
-                        table = self.registry[('table', table)][0]._drop(self.engine)
+                        schema, table = item.source_table.split('.')
+                        self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
                 
         return (
             f"GIS Analysis complete."
