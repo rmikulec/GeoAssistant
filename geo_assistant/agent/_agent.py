@@ -294,7 +294,6 @@ class GeoAgent:
                 if isinstance(item, TableCreated):
                     table = self.registry.register(
                         name=item.table,
-                        schema=analysis.name,
                         engine=self.engine
                     )
                     table._postprocess(self.engine)

@@ -75,6 +75,13 @@ class TableRegistry:
         self.tables: dict[Table] = {}
 
     
+    @property
+    def schemas(self):
+        return {
+            table.schema
+            for table in self.tables.values()
+        }
+
     @staticmethod
     def _get_geometry_type(
         engine: Engine, 
@@ -122,6 +129,10 @@ class TableRegistry:
             metadata = requests.get(
                 info['detailurl']
             ).json()
+            if "properties" in metadata:
+                columns = [prop['name'] for prop in metadata['properties']]
+            else:
+                columns = []
             instance.tables[id_] = Table(
                 name=info['name'],
                 schema=info['schema'],
@@ -131,15 +142,13 @@ class TableRegistry:
                     schema=info['schema'],
                     table=info['name'],
                 ),
-                columns=[
-                    prop['name'] for prop in metadata['properties']
-                ]
+                columns=columns
             )
         
         return instance
 
 
-    def register(self, name: str, analysis: str, engine: Engine) -> Table:
+    def register(self, name: str, engine: Engine) -> Table:
         # Search index:
         index = requests.get(
             f"{Configuration.pg_tileserv_url}/index.json"
@@ -151,9 +160,12 @@ class TableRegistry:
                 metadata = requests.get(
                     info['detailurl']
                 ).json()
+                if "properties" in metadata:
+                    columns = [prop['name'] for prop in metadata['properties']]
+                else:
+                    columns = []
                 self.tables[id_] = Table(
                     name=info['name'],
-                    analysis=analysis,
                     schema=info['schema'],
                     url=info['detailurl'],
                     geometry_type=self._get_geometry_type(
@@ -161,9 +173,7 @@ class TableRegistry:
                         schema=info['schema'],
                         table=info['name'],
                     ),
-                    columns=[
-                        prop['name'] for prop in metadata['properties']
-                    ]
+                    columns=columns
                 )
                 return self.tables[id_]
 
@@ -255,7 +265,17 @@ class TableRegistry:
 
         return candidates
 
-    
+    def drop_schema(self, engine: Engine, schema_name: str) -> None:
+        """
+        Drops a PostgreSQL/PostGIS schema and all contained objects.
+
+        Args:
+            - engine: an initialized SQLAlchemy Engine
+            - schema_name: name of the schema to drop
+        """
+        sql = text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE;')
+        with engine.begin() as conn:
+            conn.execute(sql)
 
     def verify_fields(self, field_results: list[dict]):
         updated_results = []

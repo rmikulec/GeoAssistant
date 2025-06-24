@@ -120,7 +120,7 @@ class _SQLStep(_GISAnalysisStep):
         tables = []
         for name, f in self.__class__.model_fields.items():
             if issubclass(f.annotation, _SourceTable):
-                tables.append(getattr(self, name).source_table.value)
+                tables.append(getattr(self, name))
 
         def choose_typmod(types: set[str]) -> str:
             poly = {'POLYGON', 'MULTIPOLYGON'}
@@ -138,7 +138,7 @@ class _SQLStep(_GISAnalysisStep):
             # 1) Gather distinct geometry types
             results = [
                 conn.execute(
-                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {schema}.{table}")
+                    text(f"SELECT DISTINCT GeometryType({geometry_column}) FROM {table}")
                 )
                 for table in tables
             ]
@@ -148,20 +148,10 @@ class _SQLStep(_GISAnalysisStep):
 
 
     def _execute(self, engine: Engine, schema: str, output_tables: list[str]) -> TableCreated:
-        geometry_type = self._get_geometry_type(engine, schema)
+        geometry_type = self._get_geometry_type(engine)
 
-        # Determine tables
-        table_args = {}
-        for field, info in self.__class__.model_fields.items():
-            if info.annotation.__name__ == "SourceTable":
-                source_table: _SourceTable = getattr(self, field)
-                if source_table.output_table_idx:
-                    table_args[field] = output_tables[source_table.output_table_idx]
-                else:
-                    table_args[field] = source_table.source_table.value
         
         exclude_args = ['select', '_type', '_is_intermediate']
-        exclude_args.extend(table_args.keys())
         other_args = self.model_dump(exclude=exclude_args)
         execute_template_sql(
             engine=engine,
@@ -170,7 +160,7 @@ class _SQLStep(_GISAnalysisStep):
             srid=3857,
             gtype=geometry_type,
             schema=schema,
-            **(table_args | other_args)
+            **other_args
         )
 
         return TableCreated(
@@ -312,7 +302,7 @@ class _AddMapLayer(_ReportingStep):
             name=self.name,
             layer_id=self.layer_id,
             reason=self.reasoning,
-            source_table="",
+            source_table=self.source_table,
             color=self.color
         )
 
@@ -367,7 +357,7 @@ class _GISAnalysis(BaseModel):
         ]
     
     @property
-    def report_steps(self) -> list[_ReportingStep]:
+    def reporting_steps(self) -> list[_ReportingStep]:
         return [
             step
             for step in self.steps
@@ -392,6 +382,15 @@ class _GISAnalysis(BaseModel):
         return self
 
     def execute(self, engine: Engine) -> GISReport:
+        with engine.begin() as conn:
+            sql = text(
+                (
+                    f"CREATE SCHEMA IF NOT EXISTS {self.name} AUTHORIZATION pg_database_owner;"
+                    f"GRANT USAGE ON SCHEMA {self.name} TO pg_database_owner;"
+                )
+            )
+            conn.execute(sql)
+
         items = []
 
         for step in self.steps:
@@ -401,12 +400,7 @@ class _GISAnalysis(BaseModel):
             if isinstance(step, _SQLStep):
                 items.append(step._execute(engine, self.name, self.output_tables))
             elif isinstance(step, _AddMapLayer):
-                layer_created_item = step.export()
-                if step.source_table.output_table_idx:
-                    layer_created_item.source_table = "public." + self.output_tables[step.source_table.output_table_idx]
-                else:
-                    print(step.source_table.source_table)
-                    layer_created_item.source_table = "public."+step.source_table.source_table.value
+                items.append(step.export())
             
         return GISReport(
             items=items

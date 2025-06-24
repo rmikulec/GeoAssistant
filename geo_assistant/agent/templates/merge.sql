@@ -1,7 +1,7 @@
 {# templates/merge.sql #}
-DROP TABLE IF EXISTS "{{ schema }}.{{ output_table }}";
+DROP TABLE IF EXISTS {{ schema }}.{{ output_table }};
 
-CREATE TABLE "{{ schema }}.{{ output_table }}" AS
+CREATE TABLE {{ schema }}.{{ output_table }} AS
 SELECT
 {%- for col in left_select %}
   l."{{ col.value }}",
@@ -13,8 +13,8 @@ SELECT
     ST_Transform(l."{{ geometry_column }}", {{ srid }}),
     {{ srid }}
   )::Geometry({{ output_geometry_type }}, {{ srid }}) AS "{{ geometry_column }}"
-FROM "{{ left_table }}" AS l
-JOIN "{{ right_table }}" AS r
+FROM {{ left_table }} AS l
+JOIN {{ right_table }} AS r
 ON
 {%- if spatial_predicate | lower == 'dwithin' %}
   ST_DWithin(
