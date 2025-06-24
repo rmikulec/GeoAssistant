@@ -28,6 +28,11 @@ def parse_args():
         help="EPSG code of source CRS (if not set, uses whatever the Parquet declares)",
     )
     p.add_argument(
+        "--metadata",
+        type=str,
+        help="The path the the metadata pdf with field definitions"
+    )
+    p.add_argument(
         "--dest-crs",
         type=int,
         default=3857,
@@ -67,11 +72,22 @@ def main():
     # 4) connect
     engine = create_engine(Configuration.db_connection_url)
 
+    # Create the 'base' schema
+    with engine.begin() as conn:
+        sql = text(
+            (
+                f"CREATE SCHEMA IF NOT EXISTS {Configuration.db_base_schema} AUTHORIZATION pg_database_owner;"
+                f"GRANT USAGE ON SCHEMA {Configuration.db_base_schema} TO pg_database_owner;"
+            )
+        )
+        conn.execute(sql)
+
     # 5) write to PostGIS
     try:
         gdf.to_postgis(
             name=args.table,
             con=engine,
+            schema='base',
             if_exists=args.if_exists,
             index=args.index
         )
@@ -86,26 +102,36 @@ def main():
     idx_name = f"idx_{args.table}_{geom_col}"
     create_idx_sql = f"""
     CREATE INDEX IF NOT EXISTS {idx_name}
-      ON {args.table}
+      ON {Configuration.db_base_schema}.{args.table}
       USING GIST ({geom_col});
     """
 
     try:
         with engine.begin() as conn:
             conn.execute(text(create_idx_sql))
-        print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
-    except Exception as e:
-        print(f"Error creating spatial index: {e}", file=sys.stderr)
-        sys.exit(1)
+            print(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
 
-    # 7) update planner statistics
-    analyze_sql = f"ANALYZE {args.table};"
-    try:
-        with engine.begin() as conn:
+            query = text(
+                (
+                    "SELECT Populate_Geometry_Columns("
+                    f"'{Configuration.db_base_schema}.{args.table}'::regclass"
+                    ");"
+                )
+            )
+            conn.execute(
+                query
+            )
+            print("grant to base")
+            conn.execute(
+                text(f"GRANT SELECT ON {Configuration.db_base_schema}.{args.table} TO public")
+            )
+
+            analyze_sql = f"ANALYZE {Configuration.db_base_schema}.{args.table};"
+
             conn.execute(text(analyze_sql))
-        print(f"Analyzed table '{args.table}' to update planner statistics.")
+            print(f"Analyzed table '{args.table}' to update planner statistics.")
     except Exception as e:
-        print(f"Error analyzing table: {e}", file=sys.stderr)
+        print(f"Error setting up table: {e}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":

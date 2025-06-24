@@ -3,7 +3,7 @@ from geo_assistant.handlers import MapHandler
 
 import json
 
-def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
+def _build_add_layer_def(tables: list[str], field_defs: list[FieldDefinition]) -> dict:
     props = {
         "layer_id": {"type": "string", "description": "ID for the new layer"},
         "color":    {"type": "string", "description": "Hex color"},
@@ -12,6 +12,11 @@ def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
             "enum": ["line","fill"],
             "default": "line",
             "description": "Line or fill"
+        },
+        "table": {
+            "type": "string",
+            "enum": tables,
+            "description": "The name of the table to pull data from"
         }
     }
 
@@ -36,7 +41,11 @@ def _build_add_layer_def(field_defs: list[FieldDefinition]) -> dict:
         "type": "function",
         "name":"add_map_layer",
         "description":"Add a layer to the map",
-        "parameters":{"type":"object","properties":props,"required":["layer_id","color","style"]}
+        "parameters":{
+            "type":"object",
+            "properties":props,
+            "required":["layer_id","color","style", "table"]
+        }
     }
 
 

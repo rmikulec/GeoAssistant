@@ -9,7 +9,7 @@ TEMPATE_PATH = pathlib.Path(__file__).resolve().parent / "templates"
 
 def execute_template_sql(
     template_name: str,
-    engine: Engine | Connection = None,
+    engine: Engine | Connection,
     *args: Any,
     **kwargs: Any
 ) -> None:
@@ -28,12 +28,9 @@ def execute_template_sql(
     template: Template = Template(
         source=(TEMPATE_PATH / (template_name + ".sql")).read_text()
     )
-    print(kwargs)
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
-    if engine is None:
-        print(sql)
-        return sql
+
     # 3) Execute
     # If it's an Engine, open a connection + transaction
     if isinstance(engine, Engine):

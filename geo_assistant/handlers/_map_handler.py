@@ -20,7 +20,7 @@ class MapHandler:
     """
 
     @cached_property
-    def _tileserv_index(self):
+    def _tileserv_index(self) -> dict:
         """
         Private property to get the index data from the pg-tileserv server
         """
@@ -33,7 +33,7 @@ class MapHandler:
         self.map_layers: dict = {}
         self._layer_filters: dict[str, list[GeoFilter]] = defaultdict(list)
         self._layer_ids: dict[str, list[str]] = defaultdict(list)
-        self._active_table: str = "public." + default_table
+        self._active_table: str = "base." + default_table
     
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)
@@ -50,6 +50,7 @@ class MapHandler:
         The direct json data for the table from pg-tileserv
         """
         try:
+            print(table_id)
             return requests.get(
                 f"{Configuration.pg_tileserv_url}/{table_id}.json"
             ).json()
@@ -82,35 +83,54 @@ class MapHandler:
             }
     
 
-    def _add_map_layer(self, table: str, layer_id: str, color: str, filters: list[GeoFilter], style: str="line"):
+    def _add_map_layer(self, table: str, layer_id: str, color: str, filters: list[GeoFilter] = None, style: str="line"):
         """
         Private method to add a new layer to the map. Layers consist of filters and are automatically
         split by 'table'
         """
-        sorted_filters = defaultdict(list)
-        for filter_ in filters:
-            sorted_filters[filter_.table].append(filter_)
+        if filters:
+            sorted_filters = defaultdict(list)
+            for filter_ in filters:
+                sorted_filters[filter_.table].append(filter_)
 
-        for table, filters_ in sorted_filters.items():
-            filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters_])
-            # Create the layer
+            for table, filters_ in sorted_filters.items():
+                filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters_])
+                # Create the layer
+                layer = {
+                    "sourcetype": "vector",
+                    "sourceattribution": "Locally Hosted PLUTO Dataset",
+                    "source": [
+                        self._get_base_tileurl(table) + "&filter=" + filter_
+                    ],
+                    "sourcelayer": table,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
+                    "type": style,                                 # draw lines
+                    "color": color,
+                    "below": "traces" 
+                }
+                # Register it to the map
+                table_layer_id = f"{table}.{layer_id}"
+                self.map_layers[table_layer_id] = layer
+                self._layer_ids[layer_id].append(table_layer_id)
+        else:
             layer = {
                 "sourcetype": "vector",
                 "sourceattribution": "Locally Hosted PLUTO Dataset",
                 "source": [
-                    self._get_base_tileurl(table) + "&filter=" + filter_
+                    self._get_base_tileurl(table)
                 ],
                 "sourcelayer": table,                  # ← must match your tileset name :contentReference[oaicite:0]{index=0}
                 "type": style,                                 # draw lines
                 "color": color,
                 "below": "traces" 
             }
-            # Register it to the map
             table_layer_id = f"{table}.{layer_id}"
             self.map_layers[table_layer_id] = layer
             self._layer_ids[layer_id].append(table_layer_id)
+
         # Add all filters to layer_filters dict, keeping them together
         self._layer_filters[layer_id] = filters
+        self._active_table = table
+        print(self.map_layers)
     
 
     def _remove_map_layer(self, layer_id: str) -> str:
