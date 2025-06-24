@@ -258,20 +258,20 @@ class GeoAgent:
                     # This tool has a custom response to handle how many parcels were selected
                     tool_response = f"{self.data_handler.filter_count(self.engine, f"{table.schema}.{table.name}", filters)} parcels found"
                 except Exception as e:
-                    logger.error(e)
+                    logger.exception(e)
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             # Seperated to explicilty call asyncronhously
             elif tool_call.name == "run_analysis":
                 try:
                     tool_response = await self.run_analysis(**kwargs)
                 except Exception as e:
-                    logger.error(e)
+                    logger.exception(e)
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             else:
                 try:
                     tool_response = self.tools[tool_call.name](**kwargs)
                 except Exception as e:
-                    logger.error(e)
+                    logger.exception(e)
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
             # Update all data
             logger.debug(f"Tool Response: {tool_response}")
@@ -374,9 +374,10 @@ class GeoAgent:
         finally:
             # No matter what, drop all the tables but the last possible
             if len(analysis.output_tables) > 1:
-                for table in analysis._final_tables:
-                    logger.debug(f"Dropping {table}...")
-                    table = self.registry[('table', table)][0]._drop(self.engine)
+                for table in analysis.tables_created:
+                    if table not in analysis.final_tables:
+                        logger.debug(f"Dropping {table}...")
+                        table = self.registry[('table', table)][0]._drop(self.engine)
                 
         return (
             f"GIS Analysis complete."

@@ -12,12 +12,12 @@ LOGGING_CONFIG = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "default",
-            "level": "INFO",
+            "level": "DEBUG",
         }
     },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": "DEBUG",
     },
 }
 

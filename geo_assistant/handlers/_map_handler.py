@@ -126,21 +126,22 @@ class PlotlyMapHandler:
 
         # build the kwargs once
         bounds = self._global_bounds
-        center = {"lon": (bounds["west"] + bounds["east"])/2, "lat": (bounds["south"] + bounds["north"])/2}
-        span = max(bounds["east"] - bounds["west"], bounds["north"] - bounds["south"])
-        zoom = -math.log2(span/360)
-        layout_kwargs = {
-            "map_style": style,
-            "map_bounds": self._global_bounds,
-            "map_center": center,
-            "map_zoom": zoom,
-            "uirevision":json.dumps(bounds) 
-        }
-        if layers:
-            logger.info(layers)
-            layout_kwargs["map_layers"] = layers
+        if bounds:
+            center = {"lon": (bounds["west"] + bounds["east"])/2, "lat": (bounds["south"] + bounds["north"])/2}
+            span = max(bounds["east"] - bounds["west"], bounds["north"] - bounds["south"])
+            zoom = -math.log2(span/360)
+            layout_kwargs = {
+                "map_style": style,
+                "map_bounds": self._global_bounds,
+                "map_center": center,
+                "map_zoom": zoom,
+                "uirevision":json.dumps(bounds) 
+            }
+            if layers:
+                logger.info(layers)
+                layout_kwargs["map_layers"] = layers
 
-        self.figure.update_layout(**layout_kwargs)
+            self.figure.update_layout(**layout_kwargs)
         return self.figure
 
     @property

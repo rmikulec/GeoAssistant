@@ -36,6 +36,7 @@ class Table(BaseModel):
         execute_template_sql(
             engine=engine,
             template_name="drop",
+            schema=self.schema,
             output_tables=[self.name]
         )
     
