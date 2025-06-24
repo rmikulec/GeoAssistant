@@ -5,11 +5,15 @@ from pydantic import BaseModel, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
+from geo_assistant.logging import get_logger
+
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.agent.report import MapLayerCreated, TableCreated
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
+
+logger = get_logger(__name__)
 
 DynamicField = Type[str]
 

@@ -5,9 +5,13 @@ from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
 from geo_assistant.config import Configuration
+from geo_assistant.logging import get_logger
 from geo_assistant.agent.report import GISReport
 from geo_assistant.agent._steps import _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _AddMapLayer
 from geo_assistant.agent._exceptions import AnalysisSQLStepFailed
+
+
+logger = get_logger(__name__)
 
 
 def make_enum(*values: str) -> Type[Enum]:
@@ -112,8 +116,7 @@ class _GISAnalysis(BaseModel):
         items = []
 
         for step in self.steps:
-            print(f"Running {step.name}")
-            print(step.reasoning)
+            logger.info(f"Running {step.name}: {step.reasoning}")
 
             if isinstance(step, _SQLStep):
                 try:
