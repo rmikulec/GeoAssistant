@@ -1,6 +1,9 @@
 import dash
+import json
+import math
 from geo_assistant.logging import get_logger
 import asyncio
+import plotly.graph_objects as go
 from sqlalchemy import create_engine
 from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
@@ -106,52 +109,40 @@ def toggle_chat(n, is_open):
     return is_open
 
 
+
 @app.callback(
-    Output("chat-log",   "children"),
-    Output("chat-input", "value"),
-    Output("map-graph",  "figure"),
-    Output("chat-btn-icon",  "children"),   # ← new!
-    Input("send-btn",    "n_clicks"),
-    State("chat-input",  "value"),
-    State("chat-log",    "children"),
+    Output("chat-log",     "children"),
+    Output("chat-input",   "value"),
+    Output("map-graph",    "figure"),
+    Output("chat-btn-icon","children"),
+    Input("send-btn",      "n_clicks"),
+    State("chat-input",    "value"),
+    State("chat-log",      "children"),
+    State("map-graph",     "figure"),        # ← grab current figure state
     running=[
         (Output("chat-input", "disabled"), True, False),
         (Output("send-btn",    "disabled"), True, False),
         (
             Output("send-btn", "children"),
-            "Thinking…",  
+            "Thinking…",
             html.I(className="fa-solid fa-paper-plane")
         ),
-    ]
+    ],
+    prevent_initial_call=True
 )
-def send_message(n_clicks, new_message, existing_log):
+def send_message(n_clicks, new_message, existing_log, existing_fig):
     if not new_message:
-        # no change if input is empty
         return existing_log, "", no_update, no_update
-    
-    # start from empty list if None
+
     log = existing_log or []
-    
-    # wrap each message in a div (you can customize the className/style)
-    # user bubble
-    log.append(
-        html.Div(
-            new_message,
-            className="chat-message user-message"
-        )
-    )
+    # — User message
+    log.append(html.Div(new_message, className="chat-message user-message"))
 
+    # — AI response
     ai_response = asyncio.run(agent.chat(new_message))
+    log.append(html.Div(ai_response, className="chat-message assistant-message"))
+    # 1. Reconstruct the figure (preserves trace uids & UI state) :contentReference[oaicite:1]{index=1}
 
-    # assistant bubble
-    log.append(
-        html.Div(
-            ai_response,
-            className="chat-message assistant-message"
-        )
-    )
-    
-    # clear the input after sending
     return log, "", agent.map_handler.update_figure(), no_update
 
 

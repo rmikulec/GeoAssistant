@@ -1,8 +1,8 @@
+import math
+import json
+from typing import Union
 from geo_assistant.logging import get_logger
-from functools import cached_property
 from collections import defaultdict
-
-import requests
 
 from plotly.graph_objects import Figure
 import plotly.express as px
@@ -34,18 +34,21 @@ class PlotlyMapHandler:
         self._active_table: Table = None
     
         # Create the figure and adjust the bounds and margins
-        self.figure = px.choropleth_map(zoom=3)
+        self.figure = px.choropleth_map(zoom=2)
 
         # 4) One single update that sets margins, style, and bounds
-        logger.info(self._global_bounds)
         self.figure.update_layout(
             margin=dict(r=0, t=0, l=0, b=0),
             map_style="dark",
-            #map_bounds=self._global_bounds,
         )
 
+        if self._global_bounds:
+            self.figure.update_layout(
+                map_bounds= self._global_bounds
+            )
+
     @property
-    def _global_bounds(self):
+    def _global_bounds(self) -> Union[dict[str, float], None]:
         """
         Gets the global bounds based on a given table. If none, will return the bounds as
             the entire maps
@@ -53,12 +56,7 @@ class PlotlyMapHandler:
         if self._active_table:
             return self._active_table.bounds
         else:
-            return {
-                "west":  -180.0,
-                "south":  -90.0,
-                "east":   180.0,
-                "north":   90.0,
-            }
+            return None
     
 
     def _add_map_layer(self, table: Table, layer_id: str, color: str, filters: list[HandlerFilter] = None, style: str="line") -> str:
@@ -73,7 +71,7 @@ class PlotlyMapHandler:
                 "sourcetype": "vector",
                 "sourceattribution": "Locally Hosted PLUTO Dataset",
                 "source": [
-                    table.tile_url + "&filter=" + cql_filter
+                    table.tile_url + "?filter=" + cql_filter
                 ],
                 "sourcelayer": f"{table.schema}.{table.name}",                  # ← must match your tileset name
                 "type": style,                                 # draw lines
@@ -127,10 +125,16 @@ class PlotlyMapHandler:
         style = "dark"
 
         # build the kwargs once
-        logger.info(self._global_bounds)
+        bounds = self._global_bounds
+        center = {"lon": (bounds["west"] + bounds["east"])/2, "lat": (bounds["south"] + bounds["north"])/2}
+        span = max(bounds["east"] - bounds["west"], bounds["north"] - bounds["south"])
+        zoom = -math.log2(span/360)
         layout_kwargs = {
             "map_style": style,
             "map_bounds": self._global_bounds,
+            "map_center": center,
+            "map_zoom": zoom,
+            "uirevision":json.dumps(bounds) 
         }
         if layers:
             logger.info(layers)

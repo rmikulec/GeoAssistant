@@ -361,8 +361,9 @@ class GeoAgent:
                     )
                     table._postprocess(self.engine)
                 elif isinstance(item, PlotlyMapLayerArguements):
+                    table = self.registry[('table', item.source_table)][0]
                     self.map_handler._add_map_layer(
-                        table=item.source_table,
+                        table=table,
                         layer_id=item.layer_id,
                         color=item.color
                     )
