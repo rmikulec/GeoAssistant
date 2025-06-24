@@ -313,7 +313,7 @@ class GeoAgent:
         if self.socket_emit:
             await self.socket_emit(
                 {
-                    "type": "ai_message",
+                    "type": "ai_response",
                     "message": ai_message
                 }
             )
@@ -330,10 +330,12 @@ class GeoAgent:
         Args:
             - query(str): Text descibing what the analysis should accomplish
         """
+        analysis_id = hash(query)
         if self.socket_emit:
             await self.socket_emit(
                 {
                     "type": "analysis",
+                    "id": analysis_id,
                     "message": query,
                     "progress": 0.0
                 }
@@ -351,7 +353,6 @@ class GeoAgent:
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
-            step_types=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _PlotlyMapLayerStep],
             fields=field_names,
             tables=[table.name for table in tables]
         )
@@ -384,7 +385,7 @@ class GeoAgent:
 
         try:
             # Execute and gather the report
-            report = await analysis.execute(self.engine)
+            report = await analysis.execute(analysis_id, self.engine)
             # Perform any actions required based on the report
             for item in report.items:
                 if isinstance(item, TableCreated):
