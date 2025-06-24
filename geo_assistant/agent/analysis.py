@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
 from geo_assistant.agent.report import GISReport
-from geo_assistant.agent._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _AddMapLayer
+from geo_assistant.agent._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _PlotlyMapLayerStep
 from geo_assistant.agent._exceptions import AnalysisSQLStepFailed
 
 
@@ -42,7 +42,7 @@ class _GISAnalysis(BaseModel):
     name: str = Field(description="Snake case name of the analysis")
     steps: list[_GISAnalysisStep]
     #Private variables to not be exposed by pydantic, but used for running the analysis
-    _tables_created: SkipJsonSchema[list[str]] = []
+    _final_tables = SkipJsonSchema[list[str]]
 
     @classmethod
     def build_model(
@@ -130,15 +130,21 @@ class _GISAnalysis(BaseModel):
         Validator updates *any* field in *any* step that is a source table to have a string value,
             in the form of {schema}.{table}
         """
+        # While filling in sources, keep track of any tables that should avoid being immediately
+        #   dropped. These are any tables that are used as a source in a `_ReportingStep`
+        final_tables = []
         for step in self.steps:
             for field, info in step.__class__.model_fields.items():
                 if issubclass(info.annotation, _SourceTable):
                     value: _SourceTable = getattr(step, field)
                     if value.output_table_idx:
                         new_value = f"{self.name}.{self.output_tables[value.output_table_idx]}"
+                        if issubclass(step, _ReportingStep):
+                            final_tables.append(new_value)
                     else:
                         new_value = f"{Configuration.db_base_schema}.{value.source_table.value}"
                     setattr(step, field, new_value)
+        self._final_tables = final_tables
         return self
 
     def execute(self, engine: Engine) -> GISReport:
@@ -182,7 +188,7 @@ class _GISAnalysis(BaseModel):
                     )
             # TODO: If any more reporting steps get added, new logic will need to be implemented
             #   here
-            elif isinstance(step, _AddMapLayer):
+            elif isinstance(step, _PlotlyMapLayerStep):
                 items.append(step.export())
             
         return GISReport(

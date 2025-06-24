@@ -1,5 +1,5 @@
 import pathlib
-from typing import Any
+from typing import Any, Union
 from sqlalchemy.engine import Engine, Connection
 from sqlalchemy import text
 from jinja2 import Template
@@ -9,7 +9,7 @@ TEMPATE_PATH = pathlib.Path(__file__).resolve().parent / "templates"
 
 def execute_template_sql(
     template_name: str,
-    engine: Engine | Connection,
+    engine: Union[Engine, Connection],
     *args: Any,
     **kwargs: Any
 ) -> None:
@@ -18,11 +18,11 @@ def execute_template_sql(
     2. Render it with positional args + named kwargs
     3. Execute the SQL against the given SQLAlchemy engine/connection
 
-    :param engine: SQLAlchemy Engine or Connection
-    :param jinja_env: Jinja2 Environment pointed at your templates folder
-    :param template_name: filename, e.g. 'buffer_step.sql.j2'
-    :param args: positional args passed into template.render()
-    :param kwargs: keyword args passed into template.render()
+    Args:
+        template_name (str): name of the template found in the `./templates` directory
+        engine (Union[Engine, Connection]): SQLAlchemy Engine or Connection
+        *args, **kwargs: Any additional arguements to be injected into the template
+
     """
     # 1) Load template
     template: Template = Template(

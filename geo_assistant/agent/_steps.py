@@ -24,7 +24,7 @@ from geo_assistant.logging import get_logger
 
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
-from geo_assistant.agent.report import MapLayerCreated, TableCreated
+from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
 
@@ -141,7 +141,6 @@ class _SQLStep(_GISAnalysisStep, ABC):
     will automatically be injected into that jinja template
     """
     _type: Literal["base"] = "base"
-    _is_intermediate: bool = False
     output_table: str = Field(..., description="Name of table being created")
 
     def _get_geometry_type(
@@ -359,8 +358,8 @@ class _PlotlyMapLayerStep(_ReportingStep):
     color: str = Field(description="Hex value of the color of the geometries")
 
 
-    def export(self) -> MapLayerCreated:
-        return MapLayerCreated(
+    def export(self) -> PlotlyMapLayerArguements:
+        return PlotlyMapLayerArguements(
             name=self.name,
             layer_id=self.layer_id,
             reason=self.reasoning,
