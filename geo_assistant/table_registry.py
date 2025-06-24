@@ -12,7 +12,8 @@ class Table(BaseModel):
     name: str
     schema: str
     columns: list[str]
-    url: str
+    index_url: str
+    tile_url: str
     bounds: dict[str, float]
     
     #Set later after creation
@@ -151,7 +152,8 @@ class TableRegistry:
         return Table(
             name=index_info['name'],
             schema=index_info['schema'],
-            url=index_info['detailurl'],
+            index_url=index_info['detailurl'],
+            tile_url=metadata['tileurl'],
             columns=columns,
             bounds=bounds
         )

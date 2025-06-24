@@ -37,10 +37,11 @@ class PlotlyMapHandler:
         self.figure = px.choropleth_map(zoom=3)
 
         # 4) One single update that sets margins, style, and bounds
+        logger.info(self._global_bounds)
         self.figure.update_layout(
             margin=dict(r=0, t=0, l=0, b=0),
             map_style="dark",
-            map_bounds=self._global_bounds,
+            #map_bounds=self._global_bounds,
         )
 
     @property
@@ -53,10 +54,10 @@ class PlotlyMapHandler:
             return self._active_table.bounds
         else:
             return {
-                "west":  -180,
-                "south":  -85.05112878,
-                "east":   180,
-                "north":   85.05112878,
+                "west":  -180.0,
+                "south":  -90.0,
+                "east":   180.0,
+                "north":   90.0,
             }
     
 
@@ -72,9 +73,9 @@ class PlotlyMapHandler:
                 "sourcetype": "vector",
                 "sourceattribution": "Locally Hosted PLUTO Dataset",
                 "source": [
-                    table.url + "&filter=" + cql_filter
+                    table.tile_url + "&filter=" + cql_filter
                 ],
-                "sourcelayer": table.name,                  # ← must match your tileset name
+                "sourcelayer": f"{table.schema}.{table.name}",                  # ← must match your tileset name
                 "type": style,                                 # draw lines
                 "color": color,
                 "below": "traces" 
@@ -86,9 +87,9 @@ class PlotlyMapHandler:
                 "sourcetype": "vector",
                 "sourceattribution": "Locally Hosted PLUTO Dataset",
                 "source": [
-                    table.url
+                    table.tile_url
                 ],
-                "sourcelayer": table.name,                  # ← must match your tileset name
+                "sourcelayer": f"{table.schema}.{table.name}",                  # ← must match your tileset name
                 "type": style,                                 # draw lines
                 "color": color,
                 "below": "traces" 
@@ -126,11 +127,13 @@ class PlotlyMapHandler:
         style = "dark"
 
         # build the kwargs once
+        logger.info(self._global_bounds)
         layout_kwargs = {
             "map_style": style,
             "map_bounds": self._global_bounds,
         }
         if layers:
+            logger.info(layers)
             layout_kwargs["map_layers"] = layers
 
         self.figure.update_layout(**layout_kwargs)
