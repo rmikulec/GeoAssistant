@@ -7,13 +7,14 @@ import requests
 from plotly.graph_objects import Figure
 import plotly.express as px
 
-from geo_assistant.handlers._filter import GeoFilter
+from geo_assistant.table_registry import Table
+from geo_assistant.handlers._filter import HandlerFilter
 from geo_assistant.handlers._exceptions import InvalidTileservTableID
 from geo_assistant.config import Configuration
 
 logger = get_logger(__name__)
 
-class MapHandler:
+class PlotlyMapHandler:
     """
     A class used in order to change the state of a plotly Map object
 
@@ -23,21 +24,14 @@ class MapHandler:
         - reset_map: Clears all layers and resets map position
     """
 
-    @cached_property
-    def _tileserv_index(self) -> dict:
-        """
-        Private property to get the index data from the pg-tileserv server
-        """
-        return requests.get(
-            f"{Configuration.pg_tileserv_url}/index.json"
-        ).json()
-
-    def __init__(self, default_table: str = Configuration.default_table):
+    def __init__(self):
         # Key attributes for udpating the figure
         self.map_layers: dict = {}
-        self._layer_filters: dict[str, list[GeoFilter]] = defaultdict(list)
+        self._layer_filters: dict[str, list[HandlerFilter]] = defaultdict(list)
         self._layer_ids: dict[str, list[str]] = defaultdict(list)
-        self._active_table: str = "base." + default_table
+
+        # Set active table to None when loading application
+        self._active_table: Table = None
     
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)
@@ -49,102 +43,71 @@ class MapHandler:
             map_style="dark"
         )
 
-    def _get_table_metadata(self, table_id: str):
-        """
-        The direct json data for the table from pg-tileserv
-        """
-        try:
-            logger.debug(f"Fetching metadata for table {table_id}")
-            return requests.get(
-                f"{Configuration.pg_tileserv_url}/{table_id}.json"
-            ).json()
-        except requests.ConnectionError:
-            raise InvalidTileservTableID(table_id=table_id)
-
-
-    def _get_base_tileurl(self, table_id: str):
-        """
-        Base tile url to be used as a source for vector layers
-        """
-        return self._get_table_metadata(table_id)['tileurl']+"?columns%20%3D%20%27BBL%27"
 
     @property
     def _global_bounds(self):
+        """
+        Gets the global bounds based on a given table. If none, will return the bounds as
+            the entire maps
+        """
         if self._active_table:
-            bounds = self._get_table_metadata(self._active_table)['bounds']
-            return {
-                "west": bounds[0],
-                "south": bounds[1],
-                "east":  bounds[2],
-                "north": bounds[3],
-            }
+            return self._active_table.bounds
         else:
             return {
-                "west": -90,
-                "south": -180,
-                "east":  90,
-                "north": 180,
+                "west":  -180,  # min longitude
+                "south":  -90,  # min latitude
+                "east":   180,  # max longitude
+                "north":   90,  # max latitude
             }
     
 
-    def _add_map_layer(self, table: str, layer_id: str, color: str, filters: list[GeoFilter] = None, style: str="line"):
+    def _add_map_layer(self, table: Table, layer_id: str, color: str, filters: list[HandlerFilter] = None, style: str="line") -> str:
         """
         Private method to add a new layer to the map. Layers consist of filters and are automatically
         split by 'table'
         """
         if filters:
-            sorted_filters = defaultdict(list)
-            for filter_ in filters:
-                sorted_filters[filter_.table].append(filter_)
-
-            for table, filters_ in sorted_filters.items():
-                filter_ = "%20AND%20".join([map_filter._to_cql() for map_filter in filters_])
-                # Create the layer
-                layer = {
-                    "sourcetype": "vector",
-                    "sourceattribution": "Locally Hosted PLUTO Dataset",
-                    "source": [
-                        self._get_base_tileurl(table) + "&filter=" + filter_
-                    ],
-                    "sourcelayer": table,                  # ← must match your tileset name
-                    "type": style,                                 # draw lines
-                    "color": color,
-                    "below": "traces" 
-                }
-                # Register it to the map
-                table_layer_id = f"{table}.{layer_id}"
-                self.map_layers[table_layer_id] = layer
-                self._layer_ids[layer_id].append(table_layer_id)
+            cql_filter = "%20AND%20".join([filter_._to_cql() for filter_ in filters])
+            # Create the layer
+            layer = {
+                "sourcetype": "vector",
+                "sourceattribution": "Locally Hosted PLUTO Dataset",
+                "source": [
+                    table.url + "&filter=" + cql_filter
+                ],
+                "sourcelayer": table.name,                  # ← must match your tileset name
+                "type": style,                                 # draw lines
+                "color": color,
+                "below": "traces" 
+            }
+            # Register it to the map
+            self.map_layers[layer_id] = layer
         else:
             layer = {
                 "sourcetype": "vector",
                 "sourceattribution": "Locally Hosted PLUTO Dataset",
                 "source": [
-                    self._get_base_tileurl(table)
+                    table.url
                 ],
-                "sourcelayer": table,                  # ← must match your tileset name
+                "sourcelayer": table.name,                  # ← must match your tileset name
                 "type": style,                                 # draw lines
                 "color": color,
                 "below": "traces" 
             }
-            table_layer_id = f"{table}.{layer_id}"
-            self.map_layers[table_layer_id] = layer
-            self._layer_ids[layer_id].append(table_layer_id)
+            self.map_layers[layer_id] = layer
 
         # Add all filters to layer_filters dict, keeping them together
         self._layer_filters[layer_id] = filters
         self._active_table = table
-        logger.debug(f"Current map layers: {self.map_layers}")
+        return f"Added {layer_id}: {layer} to map"
     
 
     def _remove_map_layer(self, layer_id: str) -> str:
         """
         Removes a layer from the map
         """
-        for table_layer_id in self._layer_ids[layer_id]:
-            del self.map_layers[table_layer_id]
+        del self.map_layers[layer_id]
         del self._layer_filters[layer_id]
-        del self._layer_ids[layer_id]
         logger.debug(f"Removed layer: {layer_id}")
         return f"Layer {layer_id} removed from the map"
 
@@ -154,6 +117,7 @@ class MapHandler:
         """
         self.map_layers = {}
         self._layer_filters = {}
+        self._active_table = None
         logger.debug("Reset map to blank state")
         return "All layers removed from map, blank map initialized"
 
@@ -171,10 +135,11 @@ class MapHandler:
         if layers:
             self.figure.update_layout(
                 map_style="dark",
-                map_layers=layers
+                map_layers=layers,
+                map_bounds=self._global_bounds
             )
         else:
-            self.figure.update_layout(map_style="dark")
+            self.figure.update_layout(mapbox_style="open-street-map")
 
         return self.figure
 

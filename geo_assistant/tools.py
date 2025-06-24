@@ -1,7 +1,6 @@
 from geo_assistant.doc_stores._field_definition_store import FieldDefinition
-from geo_assistant.handlers import MapHandler
+from geo_assistant.handlers import PlotlyMapHandler
 
-import json
 
 def _build_add_layer_def(tables: list[str], field_defs: list[FieldDefinition]) -> dict:
     props = {
@@ -49,7 +48,7 @@ def _build_add_layer_def(tables: list[str], field_defs: list[FieldDefinition]) -
     }
 
 
-def _build_remove_layer_def(map_handler: MapHandler) -> dict:
+def _build_remove_layer_def(map_handler: PlotlyMapHandler) -> dict:
     return {
         "type": "function",
         "name":"remove_map_layer",

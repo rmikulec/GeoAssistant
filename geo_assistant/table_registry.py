@@ -11,9 +11,12 @@ from geo_assistant.config import Configuration
 class Table(BaseModel):
     name: str
     schema: str
-    geometry_type: str
     columns: list[str]
     url: str
+    bounds: dict[str, float]
+    
+    #Set later after creation
+    geometry_type: str = None
 
     def filter(self, fields: list[str]) -> Self:
         new_table = self.model_copy()
@@ -118,6 +121,41 @@ class TableRegistry:
             except ProgrammingError:
                 return "NotFound"
 
+
+    @staticmethod
+    def _extract_table_from_tileserv(
+        index_info: dict,
+        metadata: dict,
+    ) -> Table:
+        if "properties" in metadata:
+            columns = [prop['name'] for prop in metadata['properties']]
+        else:
+            columns = []
+
+        if "bounds" in metadata:
+            bounds_data = metadata['bounds']
+            bounds = {
+                "west": bounds_data[0],
+                "south": bounds_data[1],
+                "east":  bounds_data[2],
+                "north": bounds_data[3],
+            }
+        else:
+            bounds = {
+                "west": -90,
+                "south": -180,
+                "east":  90,
+                "north": 180,
+            }
+
+        return Table(
+            name=index_info['name'],
+            schema=index_info['schema'],
+            url=index_info['detailurl'],
+            columns=columns,
+            bounds=bounds
+        )
+
     @classmethod
     def load_from_tileserv(cls, engine: Engine) -> Self:
         index = requests.get(
@@ -129,22 +167,15 @@ class TableRegistry:
             metadata = requests.get(
                 info['detailurl']
             ).json()
-            if "properties" in metadata:
-                columns = [prop['name'] for prop in metadata['properties']]
-            else:
-                columns = []
-            instance.tables[id_] = Table(
-                name=info['name'],
-                schema=info['schema'],
-                url=info['detailurl'],
-                geometry_type=cls._get_geometry_type(
-                    engine=engine,
-                    schema=info['schema'],
-                    table=info['name'],
-                ),
-                columns=columns
+            table = cls._extract_table_from_tileserv(
+                info, metadata
             )
-        
+            table.geometry_type = cls._get_geometry_type(
+                engine=engine,
+                schema=info['schema'],
+                table=info['name'],
+            )
+            instance.tables[id_] = table
         return instance
 
 
@@ -160,22 +191,17 @@ class TableRegistry:
                 metadata = requests.get(
                     info['detailurl']
                 ).json()
-                if "properties" in metadata:
-                    columns = [prop['name'] for prop in metadata['properties']]
-                else:
-                    columns = []
-                self.tables[id_] = Table(
-                    name=info['name'],
-                    schema=info['schema'],
-                    url=info['detailurl'],
-                    geometry_type=self._get_geometry_type(
-                        engine=engine,
-                        schema=info['schema'],
-                        table=info['name'],
-                    ),
-                    columns=columns
+                table = self._extract_table_from_tileserv(
+                    info, metadata
                 )
-                return self.tables[id_]
+                table.geometry_type = self._get_geometry_type(
+                    engine=engine,
+                    schema=info['schema'],
+                    table=info['name'],
+                )
+                self.tables[id_] = table
+    
+        return self.tables[id_]
 
     def unregister(self, name: str, engine: Engine):
         for id_, table in self.tables.items():
