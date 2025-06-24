@@ -35,14 +35,13 @@ class PlotlyMapHandler:
     
         # Create the figure and adjust the bounds and margins
         self.figure = px.choropleth_map(zoom=3)
-        self.figure.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-        self.figure.update_layout(map_bounds=self._global_bounds)
 
-        # Udpate the figure once while initializing
+        # 4) One single update that sets margins, style, and bounds
         self.figure.update_layout(
-            map_style="dark"
+            margin=dict(r=0, t=0, l=0, b=0),
+            map_style="dark",
+            map_bounds=self._global_bounds,
         )
-
 
     @property
     def _global_bounds(self):
@@ -54,10 +53,10 @@ class PlotlyMapHandler:
             return self._active_table.bounds
         else:
             return {
-                "west":  -180,  # min longitude
-                "south":  -90,  # min latitude
-                "east":   180,  # max longitude
-                "north":   90,  # max latitude
+                "west":  -180,
+                "south":  -85.05112878,
+                "east":   180,
+                "north":   85.05112878,
             }
     
 
@@ -121,26 +120,20 @@ class PlotlyMapHandler:
         logger.debug("Reset map to blank state")
         return "All layers removed from map, blank map initialized"
 
-    def update_figure(self) ->Figure:
-        """
-        Updates the figure depending on what layers have been added / removed since last update
-
-        If there are no more layers (a reset or all removed), then it will reset the entire figure
-
-        Returns:
-            Figure: The MapHandler's map plotly figure, configured with all the correct layers
-        """
+    def update_figure(self) -> Figure:
         layers = list(self.map_layers.values())
-        logger.debug(f"Updating figure with {len(layers)} layers")
-        if layers:
-            self.figure.update_layout(
-                map_style="dark",
-                map_layers=layers,
-                map_bounds=self._global_bounds
-            )
-        else:
-            self.figure.update_layout(mapbox_style="open-street-map")
+        # reuse whatever style you’ve chosen; you could even track it in self._style
+        style = "dark"
 
+        # build the kwargs once
+        layout_kwargs = {
+            "map_style": style,
+            "map_bounds": self._global_bounds,
+        }
+        if layers:
+            layout_kwargs["map_layers"] = layers
+
+        self.figure.update_layout(**layout_kwargs)
         return self.figure
 
     @property
