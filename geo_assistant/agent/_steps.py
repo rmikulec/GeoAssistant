@@ -223,8 +223,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
         return TableCreated(
             name=self.name,
             reason=self.reasoning,
-            table=self.output_table,
-            is_intermediate=True
+            table_created=self.output_table,
         )
     
 
@@ -375,7 +374,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
 # List of default steps to be used if not specified else
 DEFAULT_STEP_TYPES = [
     _AggregateStep,
-    _FilterItem,
+    _FilterStep,
     _MergeStep,
     _BufferStep,
     _PlotlyMapLayerStep

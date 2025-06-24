@@ -1,6 +1,8 @@
 import logging
 from logging.config import dictConfig
 
+from geo_assistant.config import Configuration
+
 LOGGING_CONFIG = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -26,13 +28,13 @@ LOGGING_CONFIG = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "colored",
-            "level": "INFO",
+            "level": Configuration.log_level,
             "stream": "ext://sys.stdout",
         },
     },
     "root": {
         "handlers": ["console"],
-        "level": "INFO",
+        "level": Configuration.log_level,
     },
 }
 

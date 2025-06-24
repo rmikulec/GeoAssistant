@@ -10,6 +10,7 @@ from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
 from sqlalchemy import create_engine
 from geo_assistant.config import Configuration
 
+
 # 1) Create the FastAPI app
 app = FastAPI()
 

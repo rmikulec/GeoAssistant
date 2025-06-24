@@ -12,8 +12,7 @@ class TableCreated(BaseModel):
     """
     name: str
     reason: str
-    table: str
-    is_intermediate: bool
+    table_created: str
 
 
 class PlotlyMapLayerArguements(BaseModel):

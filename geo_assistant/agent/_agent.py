@@ -422,7 +422,7 @@ class GeoAgent:
                     self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
             
         return (
-            f"GIS Analysis complete."
+            f"GIS Analysis ran succussfully."
             f"Report description:"
             f"{report.model_dump_json(indent=2)}"
         )

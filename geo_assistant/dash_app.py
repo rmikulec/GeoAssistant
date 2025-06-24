@@ -139,7 +139,8 @@ def create_dash_app(server, initial_figure):
             prog = payload.get("progress")
 
             if typ == "analysis":
-                # show analysis text + little blue progress bar
+                analysis_id = payload.get("id")
+                # build the children for this analysis div
                 children = [html.Div(txt, className="analysis-message-text")]
                 if prog is not None:
                     children.append(
@@ -148,11 +149,29 @@ def create_dash_app(server, initial_figure):
                             max=100,
                             striped=True,
                             animated=True,
-                            style={"height":"6px","marginTop":"4px"},
+                            style={"height": "6px", "marginTop": "4px"},
                             color="info",
                         )
                     )
-                log.append(html.Div(children, className="chat-message analysis-message"))
+
+                # our stable div id
+                div_id = f"analysis-{analysis_id}"
+
+                # try to find an existing entry in log with that id
+                existing_idx = next(
+                    (i for i, child in enumerate(log)
+                    if getattr(child, "props", {}).get("id") == div_id),
+                    None
+                )
+
+                new_div = html.Div(children, id=div_id, className="chat-message assistant-message")
+
+                if existing_idx is not None:
+                    # replace the old one
+                    log[existing_idx] = new_div
+                else:
+                    # first time: append it
+                    log.append(new_div)
 
             elif typ == "ai_response":
                 log.append(html.Div(txt, className="chat-message assistant-message"))
