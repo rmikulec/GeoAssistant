@@ -1,4 +1,4 @@
-from typing import Type, Union, Sequence, Self
+from typing import Type, Union, Sequence, Self, Callable, Optional
 from enum import Enum
 from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -160,7 +160,7 @@ class _GISAnalysis(BaseModel):
                     setattr(step, field, new_value)
         return self
 
-    def execute(self, engine: Engine) -> GISReport:
+    async def execute(self, id_: str, engine: Engine, socket_emit: Callable = None, query: str = None) -> GISReport:
         """
         Executes the pregenerated plan. This will populate a new schema in the database, filled
             with any tables that this particular analysis used. It returns a strucutred "GISReport"
@@ -187,8 +187,19 @@ class _GISAnalysis(BaseModel):
 
         items = []
         # Run each step, saving result to the 'items' array
-        for step in self.steps:
+        for i, step in enumerate(self.steps):
             logger.info(f"Running {step.name}: {step.reasoning}")
+            if socket_emit:
+                await socket_emit(
+                    {
+                        "type": "analysis",
+                        "query": query,
+                        "step": step.reasoning,
+                        "id": id_,
+                        "status": "running",
+                        "progress": float(i+1)/len(self.steps)
+                    }
+                )
 
             if isinstance(step, _SQLStep):
                 try:

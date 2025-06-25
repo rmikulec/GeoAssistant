@@ -3,7 +3,7 @@ DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
 CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
 SELECT
-{%- for col in select_columns %}
+{%- for col in select %}
   "{{ col.value }}",
 {%- endfor %}
   ST_SetSRID(

@@ -1,7 +1,9 @@
 colorlog
 dash
 dash-bootstrap-components
+dash-extensions
 faiss-cpu
+fastapi
 geopandas
 geoalchemy2
 googlemaps
@@ -16,3 +18,5 @@ pydantic
 pydantic_settings
 shapely
 sqlalchemy
+uvicorn
+websockets

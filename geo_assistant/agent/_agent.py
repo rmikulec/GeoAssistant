@@ -10,6 +10,7 @@ import pathlib
 import openai
 import json
 
+from fastapi import WebSocket
 from openai.types.responses import ParsedResponse
 from typing import Callable, Any
 from jinja2 import Template
@@ -86,7 +87,8 @@ class GeoAgent:
         field_store: FieldDefinitionStore = None,
         info_store: SupplementalInfoStore = None,
         model: str = Configuration.inference_model,
-        use_smart_search: bool = False
+        use_smart_search: bool = False,
+        socket_emit: Callable = None
     ):
         self.model: str = model
         self.engine: Engine = engine
@@ -95,6 +97,7 @@ class GeoAgent:
         self.data_handler: PostGISHandler = data_handler
         self.client: openai.AsyncOpenAI = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
         self.registry: TableRegistry = TableRegistry.load_from_tileserv(self.engine)
+        self.socket_emit = socket_emit
 
         # Set the field store depending if given or not
         if field_store is None:
@@ -125,6 +128,11 @@ class GeoAgent:
             "run_analysis":     self.run_analysis
         }
 
+    def _set_websocket(self, websocket: WebSocket):
+        async def socket_emit(payload: dict):
+            # payload must be JSON-serializable
+            await websocket.send_text(json.dumps(payload))
+        self.socket_emit = socket_emit
 
     @property
     def conversation(self):
@@ -250,6 +258,13 @@ class GeoAgent:
                         op=filter_details['operator'],
                     ))
                 table = self.registry[('table', kwargs['table'])][0]
+                self.map_handler._add_map_layer(
+                    table=table,
+                    layer_id=kwargs['layer_id'],
+                    filters=filters,
+                    style=kwargs['style'],
+                    color=kwargs['color']
+                )
                 # Run the function with the new filter arg injected
                 try:
                     kwargs['filters'] = filters
@@ -285,6 +300,14 @@ class GeoAgent:
     
         # Recall openai if any tool calls were made for a user-friendly resposne
         if made_tool_calls:
+            if self.socket_emit:
+                map_json = self.map_handler.update_figure().to_json()
+                await self.socket_emit(
+                    {
+                        "type": "figure_update",
+                        "figure": map_json
+                    }
+                )
             res = await self.client.responses.create(
                 model=self.model,
                 input=self.messages,
@@ -293,6 +316,15 @@ class GeoAgent:
         ai_message = res.output_text
         logger.debug(f"LLM reply: {ai_message}")
         self.messages.append({'role': 'assistant', 'content': ai_message})
+
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "ai_response",
+                    "message": ai_message
+                }
+            )
+
         return ai_message
     
 
@@ -305,6 +337,18 @@ class GeoAgent:
         Args:
             - query(str): Text descibing what the analysis should accomplish
         """
+        analysis_id = str(abs(hash(query)))
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "analysis",
+                    "id": analysis_id,
+                    "query": query,
+                    "step": "Generating analysis plan...",
+                    "status": "generate",
+                    "progress": 1
+                }
+            )
         logger.info(f"Running analysis for query: {query}")
         # Setup the system message template
         system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
@@ -318,7 +362,6 @@ class GeoAgent:
         # Create a new Analysis Model with those fields as Enums (This forces the model to only
         #   use valid fields)
         DynGISModel = _GISAnalysis.build_model(
-            step_types=[_AggregateStep, _MergeStep, _BufferStep, _FilterStep, _PlotlyMapLayerStep],
             fields=field_names,
             tables=[table.name for table in tables]
         )
@@ -332,31 +375,50 @@ class GeoAgent:
         )
         logger.debug(system_message)
         
-        # Hit openai to generate a step-by-step plan for the analysis
-        res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
-            input=[
-                {'role': 'system', 'content': system_message},
-                {'role': 'user', 'content': query}
-            ],
-            model="o4-mini",
-            reasoning={
-                "effort":"high",
-            },
-            text_format=DynGISModel
-        )
-        analysis = res.output_parsed
-        logger.debug(analysis.model_dump_json(indent=2))
+        try:
+            # Hit openai to generate a step-by-step plan for the analysis
+            res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+                input=[
+                    {'role': 'system', 'content': system_message},
+                    {'role': 'user', 'content': query}
+                ],
+                model="o4-mini",
+                reasoning={
+                    "effort":"high",
+                },
+                text_format=DynGISModel
+            )
+            analysis = res.output_parsed
+        except Exception as e:
+            if self.socket_emit:
+                await self.socket_emit(
+                    {
+                        "type": "analysis",
+                        "id": analysis_id,
+                        "query": query,
+                        "step": "Analysis plan failed to generate.",
+                        "status": "error",
+                        "progress": 1.0
+                    }
+                )
+            raise e
+        logger.info(analysis.model_dump_json(indent=2))
         # Run through the steps, executing each query
         logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
 
         try:
             # Execute and gather the report
-            report = analysis.execute(self.engine)
+            report = await analysis.execute(
+                id_=analysis_id, 
+                engine=self.engine, 
+                socket_emit=self.socket_emit,
+                query=query
+            )
             # Perform any actions required based on the report
             for item in report.items:
                 if isinstance(item, TableCreated):
                     table = self.registry.register(
-                        id_=f"{analysis.name}.{item.table}",
+                        id_=f"{analysis.name}.{item.table_created}",
                         engine=self.engine
                     )
                     table._postprocess(self.engine)
@@ -376,6 +438,9 @@ class GeoAgent:
                     logger.warning(
                         f"Report item type {type(item)} handler not implemented"
                     )
+            report_succeded = True
+        except:
+            report_succeded = False
         finally:
             # No matter what, drop all the tables but the last possible
             logger.debug(analysis.tables_created)
@@ -386,9 +451,24 @@ class GeoAgent:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
                     self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-            
-        return (
-            f"GIS Analysis complete."
-            f"Report description:"
-            f"{report.model_dump_json(indent=2)}"
-        )
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "analysis",
+                    "id": analysis_id,
+                    "query": query,
+                    "step": "Complete",
+                    "status": "complete" if report_succeded else "error",
+                    "progress": 1.0
+                }
+            )
+        if report_succeded:
+            return (
+                f"GIS Analysis ran succussfully."
+                f"Report description:"
+                f"{report.model_dump_json(indent=2)}"
+            )
+        else:
+            return (
+                f"GIS Analysis failed."
+            )

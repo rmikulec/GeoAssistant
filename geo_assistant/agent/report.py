@@ -12,8 +12,7 @@ class TableCreated(BaseModel):
     """
     name: str
     reason: str
-    table: str
-    is_intermediate: bool
+    table_created: str
 
 
 class PlotlyMapLayerArguements(BaseModel):
@@ -25,6 +24,11 @@ class PlotlyMapLayerArguements(BaseModel):
     source_table: str
     layer_id: str
     color: str
+
+
+class SaveTable(BaseModel):
+    table: str
+    schema: str
 
 
 class GISReport(BaseModel):

@@ -61,7 +61,7 @@ class PostGISHandler:
         self,
         engine: Engine,
         table: str,
-        filters: list[HandlerFilter],
+        filters: list[HandlerFilter] = None,
     ) -> int:
         """
         Counts the number of rows found with a given set of filters. Useful for returning data
@@ -75,9 +75,11 @@ class PostGISHandler:
             int: The number of rows that meet the criterial of the filter
         """
         total_count = 0
-        where_clause = " AND ".join(f._to_sql() for f in filters)
-        sql = f"SELECT COUNT(*) FROM {table} WHERE {where_clause};"
-
+        if filters:
+            where_clause = " AND ".join(f._to_sql() for f in filters)
+            sql = f"SELECT COUNT(*) FROM {table} WHERE {where_clause};"
+        else:
+            sql = f"SELECT COUNT(*) FROM {table}"
         with engine.connect() as conn:
             total_count += conn.execute(text(sql)).scalar()
         return total_count

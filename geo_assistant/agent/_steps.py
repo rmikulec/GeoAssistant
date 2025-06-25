@@ -24,7 +24,7 @@ from geo_assistant.logging import get_logger
 
 from geo_assistant.config import Configuration
 from geo_assistant.agent._sql_exec import execute_template_sql
-from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated
+from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated, SaveTable
 from geo_assistant.agent._filter import SQLFilters, _FilterItem
 from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
 
@@ -145,7 +145,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
     have a template in 'geo_assistant/agent/templates' with the same name as `_type`. Model fields
     will automatically be injected into that jinja template
     """
-    _type: Literal["base"] = "base"
+    step_type: Literal["base"] = "base"
     output_table: str = Field(..., description="Name of table being created")
 
     def _get_geometry_type(
@@ -211,7 +211,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
         other_args = self.model_dump(exclude=exclude_args)
         execute_template_sql(
             engine=engine,
-            template_name=self._type,
+            template_name=self.step_type,
             geometry_column=Configuration.geometry_column,
             srid=3857,
             gtype=geometry_type,
@@ -223,8 +223,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
         return TableCreated(
             name=self.name,
             reason=self.reasoning,
-            table=self.output_table,
-            is_intermediate=True
+            table_created=self.output_table,
         )
     
 
@@ -233,13 +232,13 @@ class _FilterStep(_SQLStep):
     """
     Filter step that runs a basic `WHERE` clause
     """
-    _type: Literal['filter'] = "filter"
+    step_type: Literal['filter'] = "filter"
     select: list[_Field]
     source_table: _SourceTable
     filters: list[_FilterItem]
 
     @classmethod
-    def _build_step_model(cls, fields_enum: type[Enum], tables_enum: type[Enum]) -> Type[Self]:
+    def _build_step_model(cls, fields_enum: Type[Enum], tables_enum: Type[Enum]) -> Type[Self]:
         """
         Needs a special build function to inject field enum into the subsequent filter classes.
         """
@@ -283,7 +282,7 @@ class _MergeStep(_SQLStep):
     """
     SQL Step to run a basic `JOIN` clause
     """
-    _type: SkipJsonSchema[Literal['merge']] = "merge"
+    step_type: Literal['merge'] = "merge"
     left_select: list[_Field]
     right_select: list[_Field]
     left_table: _SourceTable
@@ -306,7 +305,7 @@ class _AggregateStep(_SQLStep):
     """
     SQL Step to run a basic `GROUP BY` clause
     """
-    _type: SkipJsonSchema[Literal['aggregate']] = "aggregate"
+    step_type: Literal['aggregate'] = "aggregate"
     select: list[_Field]
     source_table: _SourceTable
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
@@ -322,7 +321,7 @@ class _AggregateStep(_SQLStep):
     output_table: str = Field(..., description="Name of the aggregated table")
 
     @classmethod
-    def _build_step_model(cls, fields_enum: type[Enum], tables_enum: type[Enum]) -> Type[Self]:
+    def _build_step_model(cls, fields_enum: Type[Enum], tables_enum: Type[Enum]) -> Type[Self]:
         """
         Needs a special build function to inject fields enum into the Aggregator classes
         """
@@ -344,7 +343,7 @@ class _BufferStep(_SQLStep):
     """
     SQL Step to run a GIS Buffer analysis
     """
-    _type: SkipJsonSchema[Literal['buffer']] = "buffer"
+    step_type: Literal['buffer'] = "buffer"
     source_table: _SourceTable
     buffer_distance: float = Field(..., description="Distance to buffer")
     buffer_unit: Literal['meters','kilometers'] = Field(
@@ -357,7 +356,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
     """
     Reporting step to export data as a Plotly Map Layer
     """
-    _type: SkipJsonSchema[Literal["addLayer"]] = "addLayer"
+    step_type: Literal["addLayer"] = "addLayer"
     source_table: _SourceTable
     layer_id: str = Field(description="The id of the new map layer")
     color: str = Field(description="Hex value of the color of the geometries")
@@ -372,11 +371,24 @@ class _PlotlyMapLayerStep(_ReportingStep):
             color=self.color
         )
     
+
+class _SaveTable(_ReportingStep):
+    step_type: Literal["saveTable"] = "saveTable"
+    source_table: _SourceTable
+
+    def export(self):
+        schema, table = self.source_table.split('.')
+        return SaveTable(
+            table=table,
+            schema=schema
+        )
+    
 # List of default steps to be used if not specified else
 DEFAULT_STEP_TYPES = [
     _AggregateStep,
-    _FilterItem,
+    _FilterStep,
     _MergeStep,
     _BufferStep,
-    _PlotlyMapLayerStep
+    _PlotlyMapLayerStep,
+    _SaveTable
 ]
