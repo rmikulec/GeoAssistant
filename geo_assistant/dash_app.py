@@ -45,7 +45,7 @@ def create_dash_app(initial_figure: dict) -> Dash:
                     id="map-graph",
                     figure=initial_figure,
                     config={"scrollZoom": True},
-                    #style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
+                    style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
                 ),
                 id="map-graph-container"
             ),
