@@ -1,5 +1,5 @@
 import requests
-from typing import Self, Optional, Any, Sequence
+from typing import Self, Sequence, Union
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import ProgrammingError

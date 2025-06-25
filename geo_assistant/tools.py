@@ -58,7 +58,7 @@ def _build_remove_layer_def(map_handler: PlotlyMapHandler) -> dict:
             "properties":{
                 "layer_id":{
                     "type":"string",
-                    "enum": list(map_handler._layer_ids.keys()),
+                    "enum": list(map_handler.map_layers.keys()),
                     "description":"ID of the layer to remove"
                 }
             },

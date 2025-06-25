@@ -6,6 +6,8 @@ from collections import defaultdict
 from sqlalchemy import Engine
 
 from geo_assistant.handlers._filter import HandlerFilter
+from geo_assistant.table_registry import Table
+from geo_assistant.agent._sql_exec import execute_template_sql
 from geo_assistant.config import Configuration
 
 
@@ -13,18 +15,18 @@ class PostGISHandler:
     """
     A handler class to interact with PostGIS tables and create spatial views for pg_tileserv.
     """
-    def __init__(self, default_table: Optional[str] = Configuration.default_table):
-        self.default_table = default_table
+    def __init__(self):
         # tracks names of created SQL views
-        self.created_views: list[str] = []
+        # TODO: Make this a dict, where key is table schema.name and values are associated filters
+        #   That way the queries can automatically use the filters to narrow down results
+        self.active_tables: list[Table] = []
 
     def get_latlong_data(
         self,
         engine: Engine,
         lat: float,
-        long: float,
-        table: Optional[str] = Configuration.default_table,
-        geometry_column: Optional[str] = Configuration.geometry_column
+        lon: float,
+        line_tolerance: Optional[int] = 10
     ) -> gpd.GeoDataFrame:
         """
         Retrieves data from a table, that intersects with a given lat/long
@@ -34,33 +36,39 @@ class PostGISHandler:
             lat (float): The latitude value
             long (float): The longitude value
             table (str): Table to query. Defaults to value found in `geo_assistant.config`
-            geometry_column (str): The column holding the table's geometry.
-                Defaults to value found in `geo_assistant.config`
+            line_tolerance (int): The tolerance of the "buffer", in meters, for when selecting
+                1-dimensional data (lines)
 
         Returns:
             GeoDataFrame: A DataFrame containing all rows that intersected with the given lat/long
         """
-        sql = f"""
-        SELECT *
-        FROM {table}
-        WHERE ST_Intersects(
-            ST_Transform({geometry_column}, 4326),
-            ST_SetSRID(ST_MakePoint(:lon, :lat), 4326)
-        );
-        """
+        if self.active_tables:
+            table = self.active_tables[0]
+            results = execute_template_sql(
+                template_name="lat_long",
+                engine=engine,
+                lat=lat,
+                lon=lon,
+                tolerance_meters=line_tolerance,
+                schema=table.schema,
+                table=table.name
+                
+            )
 
-        return gpd.read_postgis(
-            sql,
-            con=engine,
-            geom_col=geometry_column,
-            crs="EPSG:4326",
-            params={"lat": lat, "lon": long}
-        )
+            results = [
+                {k: v for k, v in result.items() if k != Configuration.geometry_column}
+                for result in results
+            ]
+
+            return results
+        else:
+            return []
+
 
     def filter_count(
         self,
         engine: Engine,
-        table: str,
+        table: Table,
         filters: list[HandlerFilter] = None,
     ) -> int:
         """
@@ -77,9 +85,9 @@ class PostGISHandler:
         total_count = 0
         if filters:
             where_clause = " AND ".join(f._to_sql() for f in filters)
-            sql = f"SELECT COUNT(*) FROM {table} WHERE {where_clause};"
+            sql = f"SELECT COUNT(*) FROM {table.name} WHERE {where_clause};"
         else:
-            sql = f"SELECT COUNT(*) FROM {table}"
+            sql = f"SELECT COUNT(*) FROM {table.name}"
         with engine.connect() as conn:
             total_count += conn.execute(text(sql)).scalar()
         return total_count

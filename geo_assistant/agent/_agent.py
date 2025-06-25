@@ -265,6 +265,7 @@ class GeoAgent:
                     style=kwargs['style'],
                     color=kwargs['color']
                 )
+                self.data_handler.active_tables.append(table)
                 # Run the function with the new filter arg injected
                 try:
                     kwargs['filters'] = filters
@@ -450,7 +451,7 @@ class GeoAgent:
                 if table_name not in analysis.final_tables:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
-                    self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
+                    self.registry[('schema', schema), ('table', table)]._drop(self.engine)
         if self.socket_emit:
             await self.socket_emit(
                 {

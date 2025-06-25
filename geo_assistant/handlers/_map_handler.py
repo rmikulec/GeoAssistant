@@ -1,165 +1,131 @@
 import math
-import json
 from typing import Union
-from geo_assistant.logging import get_logger
 from collections import defaultdict
 
+import plotly.graph_objects as go
 from plotly.graph_objects import Figure
-import plotly.express as px
 
+from geo_assistant.logging import get_logger
 from geo_assistant.table_registry import Table
 from geo_assistant.handlers._filter import HandlerFilter
-from geo_assistant.handlers._exceptions import InvalidTileservTableID
-from geo_assistant.config import Configuration
 
 logger = get_logger(__name__)
 
 class PlotlyMapHandler:
     """
-    A class used in order to change the state of a plotly Map object
+    A class used to manage and render Plotly Mapbox figures with vector-tile layers
 
     Methods:
-        - add_map_layer: Adds a layer to the plotly map figure
-        - remove_map_layer: Removed a layer given a layer_id
+        - add_map_layer: Adds a vector-tile layer to the map figure
+        - remove_map_layer: Removes a layer given its layer_id
         - reset_map: Clears all layers and resets map position
+        - update_figure: Applies current state to the figure and returns it
     """
 
     def __init__(self):
-        # Key attributes for udpating the figure
-        self.map_layers: dict = {}
+        # Store layers and their filters
+        self.map_layers: dict[str, dict] = {}
         self._layer_filters: dict[str, list[HandlerFilter]] = defaultdict(list)
-        self._layer_ids: dict[str, list[str]] = defaultdict(list)
-
-        # Set active table to None when loading application
         self._active_table: Table = None
-    
-        # Create the figure and adjust the bounds and margins
-        self.figure = px.choropleth_map(zoom=2)
 
-        # 4) One single update that sets margins, style, and bounds
+        # Base Figure
+        self.figure = go.Figure(go.Choroplethmapbox())  # empty scatter to initialize mapbox
         self.figure.update_layout(
-            margin=dict(r=0, t=0, l=0, b=0),
-            map_style="dark",
+            mapbox=dict(
+                style="open-street-map",
+                center=dict(lat=0, lon=0),
+                zoom=1,
+                layers=[]
+            ),
+            margin=dict(l=0, r=0, t=0, b=0)
         )
-
-        if self._global_bounds:
-            self.figure.update_layout(
-                map_bounds= self._global_bounds
-            )
 
     @property
     def _global_bounds(self) -> Union[dict[str, float], None]:
         """
-        Gets the global bounds based on a given table. If none, will return the bounds as
-            the entire maps
+        Gets the bounding box for the currently active table, or None if unset
         """
         if self._active_table:
             return self._active_table.bounds
-        else:
-            return None
-    
+        return None
 
-    def _add_map_layer(self, table: Table, layer_id: str, color: str, filters: list[HandlerFilter] = None, style: str="line") -> str:
+    def _add_map_layer(
+        self,
+        table: Table,
+        layer_id: str,
+        color: str,
+        filters: list[HandlerFilter] = None,
+        style: str = "line"
+    ) -> None:
         """
-        Private method to add a new layer to the map. Layers consist of filters and are automatically
-        split by 'table'
+        Adds or replaces a vector-tile layer on the map.
         """
+        url = table.tile_url
         if filters:
-            cql_filter = "%20AND%20".join([filter_._to_cql() for filter_ in filters])
-            # Create the layer
-            layer = {
-                "sourcetype": "vector",
-                "sourceattribution": "Locally Hosted PLUTO Dataset",
-                "source": [
-                    table.tile_url + "?filter=" + cql_filter
-                ],
-                "sourcelayer": f"{table.schema}.{table.name}",                  # ← must match your tileset name
-                "type": style,                                 # draw lines
-                "color": color,
-                "below": "traces" 
-            }
-            # Register it to the map
-            self.map_layers[layer_id] = layer
-        else:
-            layer = {
-                "sourcetype": "vector",
-                "sourceattribution": "Locally Hosted PLUTO Dataset",
-                "source": [
-                    table.tile_url
-                ],
-                "sourcelayer": f"{table.schema}.{table.name}",                  # ← must match your tileset name
-                "type": style,                                 # draw lines
-                "color": color,
-                "below": "traces" 
-            }
-            self.map_layers[layer_id] = layer
+            # combine CQL filters
+            cql = "%20AND%20".join(f._to_cql() for f in filters)
+            url = f"{url}?filter={cql}"
 
-        # Add all filters to layer_filters dict, keeping them together
-        self._layer_filters[layer_id] = filters
+        layer = {
+            "sourcetype":"vector",
+            "sourcelayer": f"{table.schema}.{table.name}",
+            "source":[url],
+            "type":style,
+            "color": color,
+            "type": style,
+        }
+
+        self.map_layers[layer_id] = layer
+        self._layer_filters[layer_id] = filters or []
         self._active_table = table
-        return f"Added {layer_id}: {layer} to map"
-    
+        logger.debug(f"Added layer {layer_id}")
 
-    def _remove_map_layer(self, layer_id: str) -> str:
+    def _remove_map_layer(self, layer_id: str) -> None:
         """
-        Removes a layer from the map
+        Removes a specified layer from the map.
         """
-        self.map_layers.pop(layer_id)
-        self._layer_filters.pop(layer_id)
-        logger.debug(f"Removed layer: {layer_id}")
-        return f"Layer {layer_id} removed from the map"
+        self.map_layers.pop(layer_id, None)
+        self._layer_filters.pop(layer_id, None)
+        logger.debug(f"Removed layer {layer_id}")
 
-    def _reset_map(self) -> str:
+    def _reset_map(self) -> None:
         """
-        Removes all layers on the map
+        Clears all layers and resets bounds.
         """
-        self.map_layers = {}
-        self._layer_filters = {}
+        self.map_layers.clear()
+        self._layer_filters.clear()
         self._active_table = None
-        logger.debug("Reset map to blank state")
-        return "All layers removed from map, blank map initialized"
+        logger.debug("Map reset to initial state")
 
     def update_figure(self) -> Figure:
-        layers = list(self.map_layers.values())
-        # reuse whatever style you’ve chosen; you could even track it in self._style
-        style = "dark"
+        """
+        Applies current layers and bounds to the figure and returns it.
+        """
+        # Prepare layout update
+        mapbox_config = dict(
+            style="open-street-map",
+            layers=list(self.map_layers.values())
+        )
 
-        # build the kwargs once
         bounds = self._global_bounds
         if bounds:
             center = {"lon": (bounds["west"] + bounds["east"])/2, "lat": (bounds["south"] + bounds["north"])/2}
             span = max(bounds["east"] - bounds["west"], bounds["north"] - bounds["south"])
-            zoom = -math.log2(span/360)
-            layout_kwargs = {
-                "map_style": style,
-                "map_bounds": self._global_bounds,
-                "map_center": center,
-                "map_zoom": zoom,
-            }
-            if layers:
-                logger.info(layers)
-                layout_kwargs["map_layers"] = layers
-            else:
-                layout_kwargs["map_layers"] = []
+            zoom = -math.log2(span / 360)
+            mapbox_config.update(center=center, zoom=zoom)
 
-            self.figure.update_layout(**layout_kwargs)
+        self.figure.update_layout(mapbox=mapbox_config)
         return self.figure
 
     @property
     def status(self) -> dict:
         """
-        Status so far consists of a readable dict, of all the layers and their filters on the map
+        Returns a summary of current layers and filters.
         """
-        layers = []
-
-        for layer_id, layer in self.map_layers.items():
-            filters = self._layer_filters[layer_id]
-            layer_json = {
-                "id": layer_id,
-                "color": layer['color'],
-                "style": layer['type'],
+        return {
+            lid: {
+                "filters": [f.model_dump() for f in flts],
+                "layer": lyr
             }
-            if filters:
-                layer_json["filters"]= [filter_.model_dump() for filter_ in filters]
-            layers.append(layer_json)
-        return layers
+            for lid, (lyr, flts) in zip(self.map_layers.keys(), zip(self.map_layers.values(), self._layer_filters.values()))
+        }
