@@ -113,11 +113,12 @@ def create_dash_app(initial_figure: dict) -> Dash:
     @dash_app.callback(
         Output("coords-display", "children"),
         Input("map-listener", "n_events"),
+        State("map-listener", "event"),
         prevent_initial_call=True,
     )
-    def debug_n(n_events):
-        logger.info(n_events)
-        return f"n_events = {n_events}"
+    def debug_n(n_events, event):
+        logger.info(f"Map clicked {n_events} — {event}")
+        return f"Map clicked {n_events} — {event}"
 
     return dash_app
 if __name__ == "__main__":
