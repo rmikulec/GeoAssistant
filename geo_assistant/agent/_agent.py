@@ -301,7 +301,7 @@ class GeoAgent:
         # Recall openai if any tool calls were made for a user-friendly resposne
         if made_tool_calls:
             if self.socket_emit:
-                map_json = self.map_handler.update_figure().to_json()
+                map_json = self.map_handler.update_figure()
                 await self.socket_emit(
                     {
                         "type": "figure_update",

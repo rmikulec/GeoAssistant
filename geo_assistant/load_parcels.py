@@ -8,6 +8,7 @@ import geopandas as gpd
 from sqlalchemy import create_engine, text
 
 from geo_assistant.config import Configuration
+from geo_assistant.agent._sql_exec import execute_template_sql
 
 logger = get_logger(__name__)
 
@@ -103,41 +104,18 @@ def main():
 
     # 6) create spatial index on the geometry column
     geom_col = gdf.geometry.name  # usually "geometry"
-    idx_name = f"idx_{args.table}_{geom_col}"
-    create_idx_sql = f"""
-    CREATE INDEX IF NOT EXISTS {idx_name}
-      ON {Configuration.db_base_schema}.{args.table}
-      USING GIST ({geom_col});
-    """
-
+    
     try:
-        with engine.begin() as conn:
-            conn.execute(text(create_idx_sql))
-            logger.info(f"Created spatial index '{idx_name}' on column '{geom_col}'.")
-
-            query = text(
-                (
-                    "SELECT Populate_Geometry_Columns("
-                    f"'{Configuration.db_base_schema}.{args.table}'::regclass"
-                    ");"
-                )
+        with engine.raw_connection() as raw_conn:
+        # Turn off SQLAlchemy’s transaction management completely
+            raw_conn.autocommit = True
+            cursor = raw_conn.cursor()
+            execute_template_sql(
+                template_name="postprocess",
+                engine=cursor,
+                schema=Configuration.db_base_schema,
+                table=args.table
             )
-            conn.execute(
-                query
-            )
-            logger.debug(
-                f"Granting SELECT on {Configuration.db_base_schema}.{args.table} to public"
-            )
-            conn.execute(
-                text(
-                    f"GRANT SELECT ON {Configuration.db_base_schema}.{args.table} TO public"
-                )
-            )
-
-            analyze_sql = f"ANALYZE {Configuration.db_base_schema}.{args.table};"
-
-            conn.execute(text(analyze_sql))
-            logger.info(f"Analyzed table '{args.table}' to update planner statistics.")
     except Exception as e:
         logger.error(f"Error setting up table: {e}")
         sys.exit(1)

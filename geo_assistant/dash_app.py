@@ -3,43 +3,57 @@
 import json
 import requests
 import logging
-from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, dcc
+from dash import Dash, html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 from dash_extensions import WebSocket
 from dash.exceptions import PreventUpdate
+import dash_leaflet as dl
 
 import geo_assistant.components as gac
 
 logger = logging.getLogger(__name__)
 
-def create_dash_app(initial_figure: dict) -> Dash:
+def create_dash_app(initial_map: dict) -> Dash:
     """
-    Create the dash app to server
+    Create the Dash app using Dash-Leaflet.
 
     Args:
-        initial_figure (dict): A plotly map dictionary detailing what to originaly serve
-    
-    Returns:
-        Dash: The completly build Dash application
+        initial_map (dict): JSON with keys "center", "zoom", "children"
     """
-
-    # Create the app
-    dash_app = Dash(
+    app = Dash(
         __name__,
         external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
         suppress_callback_exceptions=True,
     )
 
-    # Create the base layout
-    dash_app.layout = html.Div([
-        # Plain WebSocket client pointed at your FastAPI /ws endpoint
+    # initial children components
+    initial_children = [
+        getattr(dl, layer["type"])(**layer["props"])
+        for layer in initial_map.get("children", [])
+    ]
+
+    app.layout = html.Div([
+        # WebSocket to your FastAPI /ws
         WebSocket(id="ws", url="ws://localhost:8000/ws"),
-        dcc.Graph(
-            id="map-graph", 
-            config={"displayModeBar": False},
-            figure=initial_figure,
-            style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
+
+        # Click feedback
+        html.Div(id="click-output",
+                 style={"position": "fixed", "bottom": "10px", "left": "10px",
+                        "background": "white", "padding": "5px"}),
+
+        # Hidden store for raw click data (if you want)
+        html.Div(id="click-data", style={"display": "none"}),
+
+        # The Dash-Leaflet map
+        dl.Map(
+            id="map",
+            center=initial_map["center"],
+            zoom=initial_map["zoom"],
+            children=initial_children,
+            style={"width": "100%", "height": "100vh"},
         ),
+
+        # Chat drawer toggle button
         html.Div(
             dbc.Button(
                 dcc.Loading(
@@ -53,55 +67,73 @@ def create_dash_app(initial_figure: dict) -> Dash:
                 size="lg",
                 className="glass-button",
             ),
-            style={"position":"fixed","top":"15px","right":"15px","zIndex":1000},
+            style={"position": "fixed", "top": "15px", "right": "15px", "zIndex": 1000},
         ),
+
+        # The drawer component (unchanged)
         gac.ChatDrawer()
     ])
 
-
-    @dash_app.callback(
+    # Toggle chat drawer
+    @app.callback(
         Output("chat-drawer", "is_open"),
         Input("open-chat", "n_clicks"),
         State("chat-drawer", "is_open"),
         prevent_initial_call=True,
     )
     def toggle_chat(n, is_open):
-        """
-        Callback to toggle the ChatDrawer using the chat button
-        """
         if n:
             return not is_open
         return is_open
 
-    @dash_app.callback(
-        Output("map-graph", "figure"),
+    # Update map on WebSocket messages of type "figure_update" (you can rename to "map_update")
+    @app.callback(
+        Output("map", "center"),
+        Output("map", "zoom"),
+        Output("map", "children"),
         Input("ws", "message"),
-        State("map-graph", "figure"),
+        State("map", "center"),
+        State("map", "zoom"),
+        State("map", "children"),
         prevent_initial_call=True,
     )
-    def update_map_figure(ws_msg, current_fig):
-        """
-        Callback that monitors the websocket for any updates to the figure
-        """
+    def update_map(ws_msg, cur_center, cur_zoom, cur_children):
         if not ws_msg or "data" not in ws_msg:
             raise PreventUpdate
-
-        payload = json.loads(ws_msg["data"])
-        if payload.get("type") != "figure_update":
-            # no_change for non-figure messages
+        msg = json.loads(ws_msg["data"])
+        if msg.get("type") != "figure_update":
             raise PreventUpdate
-        logger.info('Map updating...')
-        return json.loads(payload["figure"])
+        payload = msg['figure']
+        # rebuild children list
+        new_children = [
+            getattr(dl, layer["type"])(**layer["props"])
+            for layer in payload.get("children", [])
+        ]
+        logger.info("Map updating via WebSocket…")
+        return payload.get("center", cur_center), payload.get("zoom", cur_zoom), new_children
 
-    return dash_app
+    # Display click coordinates
+    @app.callback(
+        Output("click-output", "children"),
+        Input("map", "click_lat_lng"),
+        prevent_initial_call=True,
+    )
+    def display_click(lat_lng):
+        if not lat_lng:
+            return "Click on the map…"
+        lat, lng = lat_lng
+        return f"Lat: {lat:.5f}, Lon: {lng:.5f}"
+
+    return app
 
 
 if __name__ == "__main__":
-    # Get the original figure from the serveer
-    initial_figure = requests.get(url="http://127.0.0.1:8000/map-figure")
-    # Create the app with the figure
-    app = create_dash_app(initial_figure=initial_figure.json())
-    # Regeister the ChatDrawer callbacks
+    # Fetch the initial map JSON from your Flask/Dash-Leaflet handler
+    r = requests.get("http://127.0.0.1:8000/map-figure")
+    r.raise_for_status()
+    initial_map = r.json()
+
+    app = create_dash_app(initial_map=initial_map)
+    # Register the ChatDrawer callbacks
     gac.ChatDrawer.register_callbacks(app, "ws")
-    # Run on port 8200
     app.run(port=8200)

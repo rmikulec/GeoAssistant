@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.wsgi import WSGIMiddleware
 from geo_assistant.dash_app import create_dash_app
 from geo_assistant.agent._agent import GeoAgent
-from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
+from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler, DashLeafletMapHandler
 from sqlalchemy import create_engine
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
@@ -21,7 +21,7 @@ app = FastAPI()
 engine = create_engine(Configuration.db_connection_url)
 agent = GeoAgent(
     engine=engine,
-    map_handler=PlotlyMapHandler(),
+    map_handler=DashLeafletMapHandler(),
     data_handler=PostGISHandler(default_table="pluto"),
 )
 
@@ -60,9 +60,9 @@ async def websocket_endpoint(ws: WebSocket):
 @app.get("/map-figure")
 async def get_map_figure():
     # Grab the figure from your singleton agent
-    fig = agent.map_handler.figure
+    fig = agent.map_handler.update_figure()
     # Convert to Plotly JSON
-    return JSONResponse(content=fig.to_plotly_json())
+    return JSONResponse(content=fig)
 
 # 5) Run it all together
 if __name__ == "__main__":
