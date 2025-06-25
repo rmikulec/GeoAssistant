@@ -1,8 +1,11 @@
 # components.py
 import json
+import uuid
+import json
+import json
 from typing import Any, Dict, List, Optional, Union
 
-from dash import Dash, Input, Output, State, html
+from dash import Dash, Input, Output, State, MATCH, ALL, html, dcc
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 
@@ -88,119 +91,124 @@ class ChatInputGroup(dbc.InputGroup):
         super().__init__([inp, btn], className="mt-auto", **kwargs)
 
 
+
+
+
 class ChatDrawer(dbc.Offcanvas):
     """
-    A complete chat panel (header + log + input).
+    A complete chat panel (header + log + input) that
+    stores ALL messages in one Store and re-renders.
     """
-    DEFAULT_ID = "chat-drawer"
+    DEFAULT_ID    = "chat-drawer"
     DEFAULT_TITLE = "Chat"
     DEFAULT_PLACEMENT = "end"
-    _drawer_style = {"width": "400px", "zIndex": "1100", **FROSTED_CONTAINER}
+    _drawer_style = {"width":"400px","zIndex":"1100", **FROSTED_CONTAINER}
 
-    def __init__(
-        self,
-        id: str = DEFAULT_ID,
-        title: str = DEFAULT_TITLE,
-        is_open: bool = False,
-        placement: str = DEFAULT_PLACEMENT,
-        **kwargs
-    ) -> None:
-        header = html.H5(title, className="mb-1 text-white")
-        log = ChatLog()
-        entry = ChatInputGroup()
+    def __init__(self, id: str = DEFAULT_ID, **kwargs) -> None:
+        header = html.H5(self.DEFAULT_TITLE, className="mb-1 text-white")
+        log    = ChatLog()
+        entry  = ChatInputGroup()
 
         body = html.Div(
-            [header, log, entry],
-            style={"height": "100%", "display": "flex", "flexDirection": "column"},
+            [
+                # <--- this holds **every** payload, in order
+                dcc.Store(id="message-store", data=[]),
+                header,
+                log,
+                entry,
+            ],
+            style={"height":"100%","display":"flex","flexDirection":"column"},
         )
 
         super().__init__(
             children=body,
             id=id,
-            is_open=is_open,
-            placement=placement,
-            className="glass-offcanvas",
+            placement=self.DEFAULT_PLACEMENT,
             style=self._drawer_style,
-            **kwargs
+            className="glass-offcanvas",
+            **kwargs,
         )
-
-    def _upsert_analysis(
-        existing: List[Union[html.Div, Dict[str, Any]]],
-        payload: Dict[str, Any],
-    ) -> List[Union[html.Div, Dict[str, Any]]]:
-        aid = str(payload["id"])
-        msg = payload.get("message", "")
-        prog = payload.get("progress")
-        status = payload.get("status")
-        desired_id = f"analysis-{aid}"
-
-        # build the new ReportMessage once
-        report = gac.ReportMessage(
-            report_name="Analysis",
-            message=msg,
-            progress=prog,
-            status=status,
-            id=desired_id,
-        )
-
-        found = False
-        new_log = []
-
-        for child in existing or []:
-            # extract the id, whether it’s a Component or a raw dict
-            cid = getattr(child, "id", None) or child.get("props", {}).get("id")
-            if cid == desired_id:
-                new_log.append(report)
-                found = True
-                break
-            else:
-                new_log.append(child)
-
-        if not found:
-            # if we never saw it, append it
-            new_log.append(report)
-        print(f"Found: {found}")
-        return new_log
 
     @classmethod
-    def register_callbacks(cls, app: Dash, ws_component_id: str = "ws") -> None:
-        """
-        Hooks up the WebSocket->chat-log logic.
-        :param ws_component_id: the id of your dcc.WebSocket component
-        """
+    def register_callbacks(cls, app: Dash, ws_id: str = "ws") -> None:
+        # 1) Upsert _all_ incoming payloads into message-store
         @app.callback(
-            Output(ChatLog.DEFAULT_ID, "children"),
-            Input(ws_component_id, "message"),
-            State(ChatLog.DEFAULT_ID, "children"),
+            Output("message-store", "data"),
+            Input(ws_id, "message"),
+            State("message-store", "data"),
             prevent_initial_call=True,
         )
-        def _on_ws_message(ws_msg: Optional[Dict[str, Any]], log: List[Any]) -> List[Any]:
+        def collect_all(ws_msg: Optional[Dict[str, Any]], store: List[Dict]) -> List[Dict]:
             if not ws_msg or "data" not in ws_msg:
                 raise PreventUpdate
 
             payload = json.loads(ws_msg["data"])
             typ = payload.get("type")
-            text = payload.get("message", "")
-            print(payload)
-            # skip figure updates
-            if typ == "figure_update":
-                raise PreventUpdate
 
+            # Build a stable `uid`:
             if typ == "analysis":
-                return cls._upsert_analysis(log, payload)
-
-            # map to the right message component
-            if typ == "ai_response":
-                comp = gac.AssistantMessage(text, id=f"message-{len(log)+1}")
-            elif typ == "user_message":
-                comp = gac.UserMessage(text, id=f"message-{len(log)+1}")
+                # use the analysis.id as the uid so updates replace
+                uid = str(payload["id"])
+                # drop any old analysis with the same id
+                store = [
+                    p for p in (store or [])
+                    if not (p.get("type")=="analysis" and str(p.get("id"))==uid)
+                ]
             else:
-                comp = html.Div(text, className="chat-message", id=f"message-{len(log)+1}")
+                # brand-new for user/assistant/other
+                uid = str(uuid.uuid4())
 
-            log = list(log or [])
-            comp.id = f"{typ}-{len(log)+1}"
-            log.append(comp)
-            return log
+            payload["uid"] = uid
+            return (store or []) + [payload]
+
+        # 2) Re-render the entire chat-log on any store change
+        @app.callback(
+            Output(ChatLog.DEFAULT_ID, "children"),
+            Input("message-store", "data"),
+        )
+        def render_all(store: List[Dict]) -> List[Any]:
+            children: List[Any] = []
+            for p in store or []:
+                typ = p.get("type")
+                uid = p["uid"]
+
+                if typ == "analysis":
+                    print(p)
+                    children.append(
+                        gac.ReportMessage(
+                            report_name="Analysis",
+                            message=p.get("message",""),
+                            progress=p.get("progress"),
+                            status=p.get("status"),
+                            id=uid,
+                        )
+                    )
+                elif typ in ("ai_response","assistant_message"):
+                    children.append(
+                        gac.AssistantMessage(
+                            p.get("message",""),
+                            id={"type":"assistant-msg","id":uid}
+                        )
+                    )
+                elif typ in ("user_message","user"):
+                    children.append(
+                        gac.UserMessage(
+                            p.get("message",""),
+                            id={"type":"user-msg","id":uid}
+                        )
+                    )
+                else:
+                    # fallback
+                    children.append(
+                        html.Div(
+                            p.get("message",""),
+                            className="chat-message",
+                            id={"type":"other-msg","id":uid}
+                        )
+                    )
+            return children
+
+
 
         @app.callback(
             Output("ws", "send"),
