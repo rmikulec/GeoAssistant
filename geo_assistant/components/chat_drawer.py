@@ -1,4 +1,10 @@
-# components.py
+"""
+Holds the ChatDrawer component, which will hold and update the states of messages recieved from
+    the websocket.
+
+To use, you must call `CardDrawer.register_callbacks`. This will properly hook up all callbacks
+    needed for this compoonent to function properly
+"""
 import json
 import uuid
 import json
@@ -131,7 +137,15 @@ class ChatDrawer(dbc.Offcanvas):
 
     @classmethod
     def register_callbacks(cls, app: Dash, ws_id: str = "ws") -> None:
-        # 1) Upsert _all_ incoming payloads into message-store
+        """
+        Registers the callbacks to a DashApp with a websocket. This component will monitor the
+            websocket for differnt message types, and update the log accordingly
+
+        Args:
+            - app (Dash): The dash application holding the component. MUST have a Websocket
+                component as well
+            - ws_id (str): The ID of the Websocket component
+        """
         @app.callback(
             Output("message-store", "data"),
             Input(ws_id, "message"),
@@ -139,6 +153,10 @@ class ChatDrawer(dbc.Offcanvas):
             prevent_initial_call=True,
         )
         def collect_all(ws_msg: Optional[Dict[str, Any]], store: List[Dict]) -> List[Dict]:
+            """
+            Call back that collects all data in the message store, and builds it accordingly.
+                This is needed in order to replace stale components with new ones.
+            """
             if not ws_msg or "data" not in ws_msg:
                 raise PreventUpdate
 
@@ -167,6 +185,10 @@ class ChatDrawer(dbc.Offcanvas):
             Input("message-store", "data"),
         )
         def render_all(store: List[Dict]) -> List[Any]:
+            """
+            Callback to render all messages in the log. Will recreate any components that require
+                an active state.
+            """
             children: List[Any] = []
             for p in store or []:
                 typ = p.get("type")
@@ -218,6 +240,9 @@ class ChatDrawer(dbc.Offcanvas):
             prevent_initial_call=True,
         )
         def send_user_message(n_clicks, message):
+            """
+            Callback to send any text to the websocket
+            """
             if not message:
                 raise PreventUpdate
             payload = json.dumps({"type": "user", "message": message})

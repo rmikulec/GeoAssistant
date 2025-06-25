@@ -3,9 +3,13 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 
-# 1) Subclass html.Div *first*, drop ABC entirely
+
 class Message(html.Div):
-    # camelCase, no hyphens or leading spaces
+    """
+    Base message class to share some characteristics among them all
+    """
+
+    # Base message styling
     _base_style = {
         "padding":            "10px 14px",
         "borderRadius":       "18px",
@@ -14,7 +18,7 @@ class Message(html.Div):
         "lineHeight":         1.4,            # unitless OK
     }
 
-    # new: default styling for the <p>
+    # Styling for the text in the message
     _p_style = {
         "fontSize": "0.75rem",          # smaller
         "color":    "rgba(0,0,0,0.5)",   # more subtle
@@ -40,6 +44,10 @@ class Message(html.Div):
 
 
 class UserMessage(Message):
+    """
+    User message class
+    """
+
     _message_type = "user"
     _style = {
         "backgroundColor":         "rgba(146,33,33,0.3)",
@@ -53,6 +61,9 @@ class UserMessage(Message):
 
 
 class AssistantMessage(Message):
+    """
+    Assistant message class
+    """
     _message_type = "assistant"
     _style = {
         "backgroundColor":         "rgba(255,255,255,0.4)",
@@ -72,7 +83,8 @@ class ReportMessage(html.Div):
     A styled message box for reporting progress.
 
     - Top: Heading with report name, "report" subheading and book icon
-    - Paragraph: updateable text
+    - Query text: Any text detailing the overall query for the analysis
+    - Step text: A subtle text detailing the current step
     - Progress bar: shows progress, turns green on completion, red on error
     """
     _base_style = {
@@ -102,7 +114,7 @@ class ReportMessage(html.Div):
             className="d-flex align-items-center mb-1",
         )
 
-        # Updateable paragraph
+        # Updateable text
         query_text = html.P(
             query,
             id=f"{id}-text" if id else None,
@@ -114,7 +126,8 @@ class ReportMessage(html.Div):
             className="mb-1",
             style={"fontSize": "0.85rem", "fontStyle": "italic"}
         )
-        # Determine progress bar parameters
+        
+        # Determine styling dependent on status
         if status == "complete":
             color = "success"
             value = 100

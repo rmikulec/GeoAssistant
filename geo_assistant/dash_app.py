@@ -12,18 +12,25 @@ import geo_assistant.components as gac
 
 logger = logging.getLogger(__name__)
 
-def create_dash_app(initial_figure):
-    # ─── Initialize your GeoAgent ────────────────────────────────────────────────
+def create_dash_app(initial_figure: dict) -> Dash:
+    """
+    Create the dash app to server
 
-    # ─── Create Dash, mounted under /dash/ ────────────────────────────────────────
+    Args:
+        initial_figure (dict): A plotly map dictionary detailing what to originaly serve
+    
+    Returns:
+        Dash: The completly build Dash application
+    """
+
+    # Create the app
     dash_app = Dash(
         __name__,
-        #requests_pathname_prefix="/dash/",
         external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
         suppress_callback_exceptions=True,
     )
 
-    # ─── Layout ───────────────────────────────────────────────────────────────────
+    # Create the base layout
     dash_app.layout = html.Div([
         # Plain WebSocket client pointed at your FastAPI /ws endpoint
         WebSocket(id="ws", url="ws://localhost:8000/ws"),
@@ -33,7 +40,6 @@ def create_dash_app(initial_figure):
             figure=initial_figure,
             style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
         ),
-
         html.Div(
             dbc.Button(
                 dcc.Loading(
@@ -49,14 +55,10 @@ def create_dash_app(initial_figure):
             ),
             style={"position":"fixed","top":"15px","right":"15px","zIndex":1000},
         ),
-
         gac.ChatDrawer()
     ])
 
-    # ─── Callbacks ────────────────────────────────────────────────────────────────
 
-    # 1) Toggle the chat drawer
-    # toggle offcanvas
     @dash_app.callback(
         Output("chat-drawer", "is_open"),
         Input("open-chat", "n_clicks"),
@@ -64,15 +66,13 @@ def create_dash_app(initial_figure):
         prevent_initial_call=True,
     )
     def toggle_chat(n, is_open):
+        """
+        Callback to toggle the ChatDrawer using the chat button
+        """
         if n:
             return not is_open
         return is_open
 
-
-
-
-    # ——————————————————————————————————————————————————————————————————————
-    # 2) Only update the figure
     @dash_app.callback(
         Output("map-graph", "figure"),
         Input("ws", "message"),
@@ -80,6 +80,9 @@ def create_dash_app(initial_figure):
         prevent_initial_call=True,
     )
     def update_map_figure(ws_msg, current_fig):
+        """
+        Callback that monitors the websocket for any updates to the figure
+        """
         if not ws_msg or "data" not in ws_msg:
             raise PreventUpdate
 
@@ -90,14 +93,15 @@ def create_dash_app(initial_figure):
         logger.info('Map updating...')
         return json.loads(payload["figure"])
 
-
-
     return dash_app
 
 
-
 if __name__ == "__main__":
+    # Get the original figure from the serveer
     initial_figure = requests.get(url="http://127.0.0.1:8000/map-figure")
+    # Create the app with the figure
     app = create_dash_app(initial_figure=initial_figure.json())
+    # Regeister the ChatDrawer callbacks
     gac.ChatDrawer.register_callbacks(app, "ws")
+    # Run on port 8200
     app.run(port=8200)
