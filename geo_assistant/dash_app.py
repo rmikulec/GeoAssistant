@@ -3,11 +3,12 @@
 import json
 import requests
 import logging
-from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update
+from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, dcc
 import dash_bootstrap_components as dbc
 from dash_extensions import WebSocket
 from dash.exceptions import PreventUpdate
 
+import geo_assistant.components as gac
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ def create_dash_app(initial_figure):
         prog = payload.get("progress")
 
         # 1) Build the new analysis Div
-        children = [html.Div(txt, className="analysis-message-text")]
+        children = [dcc.Markdown(txt, className="analysis-message-text")]
         if prog is not None:
             children.append(
                 dbc.Progress(
@@ -200,7 +201,10 @@ def create_dash_app(initial_figure):
             return _upsert_analysis(log, payload)
 
         if typ == "ai_response":
-            log.append(html.Div(text, className="chat-message assistant-message"))
+            log.append(gac.AssistantMessage(text, id=f"assistant-{len(log)+1}"))
+            return log
+        if typ == "user_message":
+            log.append(gac.UserMessage(text, id=f"assistant-{len(log)+1}"))
             return log
 
         # catch-all for other small messages
