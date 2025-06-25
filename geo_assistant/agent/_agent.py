@@ -343,7 +343,8 @@ class GeoAgent:
                 {
                     "type": "analysis",
                     "id": analysis_id,
-                    "message": query,
+                    "query": query,
+                    "step": "Generating analysis plan...",
                     "status": "generate",
                     "progress": 1
                 }
@@ -394,7 +395,8 @@ class GeoAgent:
                     {
                         "type": "analysis",
                         "id": analysis_id,
-                        "message": query,
+                        "query": query,
+                        "step": "Analysis plan failed to generate.",
                         "status": "error",
                         "progress": 1.0
                     }
@@ -409,7 +411,8 @@ class GeoAgent:
             report = await analysis.execute(
                 id_=analysis_id, 
                 engine=self.engine, 
-                socket_emit=self.socket_emit
+                socket_emit=self.socket_emit,
+                query=query
             )
             # Perform any actions required based on the report
             for item in report.items:
@@ -453,7 +456,8 @@ class GeoAgent:
                 {
                     "type": "analysis",
                     "id": analysis_id,
-                    "message": query,
+                    "query": query,
+                    "step": "Complete",
                     "status": "complete" if report_succeded else "error",
                     "progress": 1.0
                 }

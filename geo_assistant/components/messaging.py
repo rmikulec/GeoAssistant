@@ -86,7 +86,8 @@ class ReportMessage(html.Div):
     def __init__(
         self,
         report_name: str,
-        message: str = "",
+        query: str = "",
+        step: str = "",
         progress: float = None,
         status: str = None,
         id: str = None,
@@ -102,33 +103,34 @@ class ReportMessage(html.Div):
         )
 
         # Updateable paragraph
-        text = html.P(
-            message,
+        query_text = html.P(
+            query,
             id=f"{id}-text" if id else None,
             className="mb-2",
         )
-
+        step_text = html.P(
+            step,
+            id=f"{id}-text" if id else None,
+            className="mb-1",
+            style={"fontSize": "0.85rem", "fontStyle": "italic"}
+        )
         # Determine progress bar parameters
         if status == "complete":
-            print("Complete")
             color = "success"
             value = 100
             striped = False
             animated = False
         elif status == "error":
-            print("Error")
             color = "danger"
             value = 100
             striped = False
             animated = False
         elif status == "generate":
-            print("Generate")
             color = "rgba(146,33,33,0.3)"
             value = (int(progress * 100)-1) if progress is not None else 0
             striped = True
             animated = True
         else:
-            print("Other")
             color = "info"
             value = (int(progress * 100)-1) if progress is not None else 0
             striped = False
@@ -145,5 +147,6 @@ class ReportMessage(html.Div):
         )
 
         # Assemble children and initialize
-        children = [heading, text, progress_bar]
+        children = [heading, query_text, step_text, progress_bar]
+
         super().__init__(children=children, id=id, style=self._base_style, key=f"{id}-{status}", **kwargs)

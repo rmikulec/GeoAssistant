@@ -160,7 +160,7 @@ class _GISAnalysis(BaseModel):
                     setattr(step, field, new_value)
         return self
 
-    async def execute(self, id_: str, engine: Engine, socket_emit: Callable = None) -> GISReport:
+    async def execute(self, id_: str, engine: Engine, socket_emit: Callable = None, query: str = None) -> GISReport:
         """
         Executes the pregenerated plan. This will populate a new schema in the database, filled
             with any tables that this particular analysis used. It returns a strucutred "GISReport"
@@ -193,7 +193,8 @@ class _GISAnalysis(BaseModel):
                 await socket_emit(
                     {
                         "type": "analysis",
-                        "message": step.reasoning,
+                        "query": query,
+                        "step": step.reasoning,
                         "id": id_,
                         "status": "running",
                         "progress": float(i+1)/len(self.steps)

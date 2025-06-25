@@ -173,11 +173,11 @@ class ChatDrawer(dbc.Offcanvas):
                 uid = p["uid"]
 
                 if typ == "analysis":
-                    print(p)
                     children.append(
                         gac.ReportMessage(
                             report_name="Analysis",
-                            message=p.get("message",""),
+                            query=p.get("query",""),
+                            step=p.get("step", ""),
                             progress=p.get("progress"),
                             status=p.get("status"),
                             id=uid,
