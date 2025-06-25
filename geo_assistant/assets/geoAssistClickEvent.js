@@ -6,14 +6,28 @@
     const map = plotlyDiv._fullLayout.mapbox._subplot.map;
     map.on('click', mbEvent => {
       const lon = mbEvent.lngLat.lng, lat = mbEvent.lngLat.lat;
+      const x = mbEvent.point.x, y = mbEvent.point.y
       console.log('🌐 mapbox click:', { lon, lat });
 
-      // dispatch on the graph container and bubble up to the EventListener div
-      container.dispatchEvent(new CustomEvent("plotlyMapClick", {
-        detail: { lon, lat },
-        bubbles: true,
-        composed: true
-      }));
+      fetch(`http://127.0.0.1:8000/query/lat-long/${lat}/${lon}`)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();     // <-- return the JSON‐parsing promise
+      })
+      .then(data => {
+        // data is the fully parsed JSON object
+        console.log('Got JSON data:', data);
+
+        container.dispatchEvent(new CustomEvent("plotlyMapClick", {
+          detail: { lon, lat, x, y, results: data },
+          bubbles: true,
+          composed: true
+        }));
+      })
+
+
     });
   } else if (attempt < 40) {
     setTimeout(() => waitAndAttach(attempt + 1), 150);

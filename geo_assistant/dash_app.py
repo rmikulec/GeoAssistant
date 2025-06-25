@@ -51,7 +51,7 @@ def create_dash_app(initial_figure: dict) -> Dash:
             ),
             events=[{
                 "event": "plotlyMapClick",
-                "props": ["detail.lon", "detail.lat"]
+                "props": ["detail.lon", "detail.lat", "detail.x", "detail.y", "detail.results"]
             }],
             id="map-listener",
             logging=True,  # logs in console on each event
@@ -116,8 +116,13 @@ def create_dash_app(initial_figure: dict) -> Dash:
         State("map-listener", "event"),
         prevent_initial_call=True,
     )
-    def debug_n(n_events, event):
-        logger.info(f"Map clicked {n_events} — {event}")
+    def handle_map_click(n_events, event):
+        print(event)
+        lat = event['detail.lat']
+        lon = event['detail.lon']
+        x = event['detail.x']
+        y = event['detail.y']
+        results = event['detail.results']
         return f"Map clicked {n_events} — {event}"
 
     return dash_app
