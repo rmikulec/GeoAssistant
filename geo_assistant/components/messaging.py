@@ -1,5 +1,7 @@
 # app.py
 from dash import html, dcc
+import dash_bootstrap_components as dbc
+
 
 # 1) Subclass html.Div *first*, drop ABC entirely
 class Message(html.Div):
@@ -63,3 +65,85 @@ class AssistantMessage(Message):
         "borderTopLeftRadius":     10,
         "borderTopRightRadius":    10,
     }
+
+
+class ReportMessage(html.Div):
+    """
+    A styled message box for reporting progress.
+
+    - Top: Heading with report name, "report" subheading and book icon
+    - Paragraph: updateable text
+    - Progress bar: shows progress, turns green on completion, red on error
+    """
+    _base_style = {
+        "padding": "12px",
+        "borderRadius": "12px",
+        "backgroundColor": "#1f1f1f",
+        "color": "#fff",
+        "marginBottom": "10px",
+    }
+
+    def __init__(
+        self,
+        report_name: str,
+        message: str = "",
+        progress: float = None,
+        status: str = None,
+        id: str = None,
+        **kwargs,
+    ):
+        # Heading with book icon and title
+        heading = html.Div(
+            [
+                html.I(className="fa fa-book me-2"),
+                html.Span(report_name, className="h5 mb-0"),
+            ],
+            className="d-flex align-items-center mb-1",
+        )
+
+        # Updateable paragraph
+        text = html.P(
+            message,
+            id=f"{id}-text" if id else None,
+            className="mb-2",
+        )
+
+        # Determine progress bar parameters
+        if status == "complete":
+            print("Complete")
+            color = "success"
+            value = 100
+            striped = False
+            animated = False
+        elif status == "error":
+            print("Error")
+            color = "danger"
+            value = 100
+            striped = False
+            animated = False
+        elif status == "generate":
+            print("Generate")
+            color = "rgba(146,33,33,0.3)"
+            value = (int(progress * 100)-1) if progress is not None else 0
+            striped = True
+            animated = True
+        else:
+            print("Other")
+            color = "info"
+            value = (int(progress * 100)-1) if progress is not None else 0
+            striped = False
+            animated = True
+
+        # Progress bar
+        progress_bar = dbc.Progress(
+            value=value,
+            id=f"{id}-progress" if id else None,
+            striped=striped,
+            animated=animated,
+            style={"height": "10px"},
+            color=color,
+        )
+
+        # Assemble children and initialize
+        children = [heading, text, progress_bar]
+        super().__init__(children=children, id=id, style=self._base_style, key=f"{id}-{status}", **kwargs)

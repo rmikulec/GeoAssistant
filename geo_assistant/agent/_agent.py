@@ -344,6 +344,7 @@ class GeoAgent:
                     "type": "analysis",
                     "id": analysis_id,
                     "message": query,
+                    "status": "generate",
                     "progress": 1
                 }
             )
@@ -373,19 +374,32 @@ class GeoAgent:
         )
         logger.debug(system_message)
         
-        # Hit openai to generate a step-by-step plan for the analysis
-        res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
-            input=[
-                {'role': 'system', 'content': system_message},
-                {'role': 'user', 'content': query}
-            ],
-            model="o4-mini",
-            reasoning={
-                "effort":"high",
-            },
-            text_format=DynGISModel
-        )
-        analysis = res.output_parsed
+        try:
+            # Hit openai to generate a step-by-step plan for the analysis
+            res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
+                input=[
+                    {'role': 'system', 'content': system_message},
+                    {'role': 'user', 'content': query}
+                ],
+                model="o4-mini",
+                reasoning={
+                    "effort":"high",
+                },
+                text_format=DynGISModel
+            )
+            analysis = res.output_parsed
+        except Exception as e:
+            if self.socket_emit:
+                await self.socket_emit(
+                    {
+                        "type": "analysis",
+                        "id": analysis_id,
+                        "message": query,
+                        "status": "error",
+                        "progress": 1.0
+                    }
+                )
+            raise e
         logger.info(analysis.model_dump_json(indent=2))
         # Run through the steps, executing each query
         logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
@@ -421,6 +435,9 @@ class GeoAgent:
                     logger.warning(
                         f"Report item type {type(item)} handler not implemented"
                     )
+            report_succeded = True
+        except:
+            report_succeded = False
         finally:
             # No matter what, drop all the tables but the last possible
             logger.debug(analysis.tables_created)
@@ -431,17 +448,23 @@ class GeoAgent:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
                     self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-            if self.socket_emit:
-                await self.socket_emit(
-                    {
-                        "type": "Report Complete",
-                        "id": analysis_id,
-                        "message": query,
-                        "progress": 1
-                    }
-                )
-        return (
-            f"GIS Analysis ran succussfully."
-            f"Report description:"
-            f"{report.model_dump_json(indent=2)}"
-        )
+        if self.socket_emit:
+            await self.socket_emit(
+                {
+                    "type": "analysis",
+                    "id": analysis_id,
+                    "message": query,
+                    "status": "complete" if report_succeded else "error",
+                    "progress": 1.0
+                }
+            )
+        if report_succeded:
+            return (
+                f"GIS Analysis ran succussfully."
+                f"Report description:"
+                f"{report.model_dump_json(indent=2)}"
+            )
+        else:
+            return (
+                f"GIS Analysis failed."
+            )

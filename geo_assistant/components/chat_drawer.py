@@ -124,48 +124,42 @@ class ChatDrawer(dbc.Offcanvas):
             **kwargs
         )
 
-    @staticmethod
     def _upsert_analysis(
         existing: List[Union[html.Div, Dict[str, Any]]],
         payload: Dict[str, Any],
     ) -> List[Union[html.Div, Dict[str, Any]]]:
-        """Insert or replace the analysis message + progress bar."""
         aid = str(payload["id"])
         msg = payload.get("message", "")
         prog = payload.get("progress")
+        status = payload.get("status")
+        desired_id = f"analysis-{aid}"
 
-        # build assistant message
-        children = [gac.AssistantMessage(msg, id=aid)]
-        if prog is not None:
-            children.append(
-                dbc.Progress(
-                    value=int(prog * 100),
-                    max=100,
-                    striped=True,
-                    animated=True,
-                    style={"height": "6px", "marginTop": "4px"},
-                    color="info",
-                )
-            )
-
-        new_div = html.Div(
-            children,
-            id=f"analysis-{aid}",
-            className="chat-message assistant-message",
+        # build the new ReportMessage once
+        report = gac.ReportMessage(
+            report_name="Analysis",
+            message=msg,
+            progress=prog,
+            status=status,
+            id=desired_id,
         )
 
-        # try to replace existing, else append
-        desired = f"analysis-{aid}"
+        found = False
         new_log = []
+
         for child in existing or []:
-            cid = getattr(child, "id", child.get("props", {}).get("id"))
-            if cid == desired:
-                new_log.append(new_div)
+            # extract the id, whether it’s a Component or a raw dict
+            cid = getattr(child, "id", None) or child.get("props", {}).get("id")
+            if cid == desired_id:
+                new_log.append(report)
+                found = True
                 break
-            new_log.append(child)
-        else:
-            # not found: append at end
-            new_log.append(new_div)
+            else:
+                new_log.append(child)
+
+        if not found:
+            # if we never saw it, append it
+            new_log.append(report)
+        print(f"Found: {found}")
         return new_log
 
     @classmethod
@@ -187,7 +181,7 @@ class ChatDrawer(dbc.Offcanvas):
             payload = json.loads(ws_msg["data"])
             typ = payload.get("type")
             text = payload.get("message", "")
-
+            print(payload)
             # skip figure updates
             if typ == "figure_update":
                 raise PreventUpdate

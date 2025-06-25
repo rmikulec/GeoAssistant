@@ -41,13 +41,13 @@ async def websocket_endpoint(ws: WebSocket):
             raw = await ws.receive_text()
             data = json.loads(raw)
             logger.info(f"Message recieved: {raw}")
-            await ws.send_text(json.dumps({'type': "user_message", "message": raw}))
 
             # only handle user messages
             if data.get("type") != "user":
                 continue
 
             user_message = data["message"]
+            await ws.send_text(json.dumps({'type': "user_message", "message": user_message}))
 
             # stream back all of your events—
             # chat_stream should be an async generator
