@@ -58,20 +58,7 @@ def create_dash_app(initial_figure: dict) -> Dash:
             id="map-listener",
             logging=True,  # logs in console on each event
         ),
-        dbc.Modal(
-            [
-                dbc.ModalHeader(html.H5("Map Click Info")),
-                dbc.ModalBody(id="coords-modal-body"),
-                dbc.ModalFooter(
-                    dbc.Button("Close", id="coords-modal-close", className="ms-auto", n_clicks=0)
-                ),
-            ],
-            id="coords-modal",
-            is_open=False,
-            size="lg",
-            centered=True,
-            scrollable=True,
-        ),
+        gac.MapClickModal(),
         html.Div(
             dbc.Button(
                 dcc.Loading(
@@ -127,66 +114,6 @@ def create_dash_app(initial_figure: dict) -> Dash:
 
 
 
-    @dash_app.callback(
-        [Output("coords-modal", "is_open"),
-        Output("coords-modal-body", "children")],
-        [Input("map-listener", "n_events"),
-        Input("coords-modal-close", "n_clicks")],
-        [State("map-listener", "event"),
-        State("coords-modal", "is_open")],
-        prevent_initial_call=True,
-    )
-    def toggle_coords_modal(n_clicks_map, n_clicks_close, event, is_open):
-        ctx = callback_context
-        if not ctx.triggered:
-            raise PreventUpdate
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-
-        if trigger_id == "map-listener":
-            lat = event["detail.lat"]
-            lon = event["detail.lon"]
-            x   = event["detail.x"]
-            y   = event["detail.y"]
-            results = event["detail.results"]
-
-            header_info = [
-                html.Div(f"📍 Lat: {lat:.5f}   Lon: {lon:.5f}"),
-                html.Div(f"🖱️  X: {x:.1f}        Y: {y:.1f}"),
-                html.Hr(),
-            ]
-
-            if results:
-                body_children = header_info + [html.H6("Features under cursor:")]
-                # for each feature dict, render a vertical key→value table
-                for idx, feat in enumerate(results, start=1):
-                    # optional sub-header if multiple features
-                    if len(results) > 1:
-                        body_children.append(html.H6(f"Feature {idx}", className="mt-3"))
-                    # build rows
-                    rows = []
-                    for key, val in feat.items():
-                        rows.append(
-                            html.Tr([
-                                html.Td(html.B(str(key)), style={"width": "30%", "verticalAlign": "top"}),
-                                html.Td(str(val), style={"width": "70%"})
-                            ])
-                        )
-                    body_children.append(
-                        html.Table(rows, style={"width": "100%", "marginBottom": "1rem"})
-                    )
-            else:
-                body_children = header_info + [
-                    html.Div("No features at this location.", className="text-muted")
-                ]
-
-            return True, body_children
-
-        elif trigger_id == "coords-modal-close":
-            return False, no_update
-
-        return is_open, no_update
-
-
     return dash_app
 if __name__ == "__main__":
     # Get the original figure from the serveer
@@ -195,5 +122,6 @@ if __name__ == "__main__":
     app = create_dash_app(initial_figure=initial_figure.json())
     # Regeister the ChatDrawer callbacks
     gac.ChatDrawer.register_callbacks(app, "ws")
+    gac.MapClickModal.register_callbacks(app, "map-listener")
     # Run on port 8200
     app.run(port=8200)

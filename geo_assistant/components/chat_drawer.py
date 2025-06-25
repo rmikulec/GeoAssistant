@@ -16,24 +16,8 @@ from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 
 import geo_assistant.components as gac
+from geo_assistant.components import css
 
-
-# Shared frosted-glass styles
-FROSTED_CONTAINER: Dict[str, Any] = {
-    "backgroundColor": "rgba(255,255,255,0.3)",
-    "backdropFilter": "blur(8px)",
-    "WebkitBackdropFilter": "blur(8px)",
-    "border": "1px solid rgba(255,255,255,0.6)",
-    "borderRadius": "5px",
-}
-
-FROSTED_INPUT: Dict[str, Any] = {
-    "backgroundColor": "rgba(255,255,255,0.25)",
-    "backdropFilter": "blur(6px)",
-    "WebkitBackdropFilter": "blur(6px)",
-    "border": "1px solid rgba(255,255,255,0.5)",
-    "borderRadius": "4px",
-}
 
 
 class ChatLog(html.Div):
@@ -47,7 +31,7 @@ class ChatLog(html.Div):
         "padding": "5px",
         "whiteSpace": "pre-wrap",
         "color": "#fff",
-        **FROSTED_CONTAINER,
+        **css.FROSTED_CONTAINER,
     }
 
     def __init__(
@@ -68,8 +52,8 @@ class ChatInputGroup(dbc.InputGroup):
     DEFAULT_INPUT_ID = "chat-input"
     DEFAULT_BUTTON_ID = "send-btn"
     DEFAULT_PLACEHOLDER = "Type your message…"
-    _input_style = FROSTED_INPUT
-    _button_style = FROSTED_INPUT
+    _input_style = css.FROSTED_INPUT
+    _button_style = css.FROSTED_INPUT
 
     def __init__(
         self,
@@ -108,7 +92,7 @@ class ChatDrawer(dbc.Offcanvas):
     DEFAULT_ID    = "chat-drawer"
     DEFAULT_TITLE = "Chat"
     DEFAULT_PLACEMENT = "end"
-    _drawer_style = {"width":"400px","zIndex":"1100", **FROSTED_CONTAINER}
+    _drawer_style = {"width":"400px","zIndex":"1100", **css.FROSTED_CONTAINER}
 
     def __init__(self, id: str = DEFAULT_ID, **kwargs) -> None:
         header = html.H5(self.DEFAULT_TITLE, className="mb-1 text-white")
