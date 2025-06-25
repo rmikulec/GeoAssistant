@@ -1,7 +1,7 @@
 # main.py
 import json
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.wsgi import WSGIMiddleware
 from geo_assistant.dash_app import create_dash_app
@@ -63,6 +63,31 @@ async def get_map_figure():
     fig = agent.map_handler.figure
     # Convert to Plotly JSON
     return JSONResponse(content=fig.to_plotly_json())
+
+@app.get("/query/lat_long/{schema}.{table}/{lat}/{long}")
+def query_lat_long(
+    schema: str,
+    table: str,
+    lat: float,
+    lon: float
+):
+    """
+    Query the given table for features within a small distance of (lat, long).
+    Delegates to agent.map_handler under the hood.
+    """
+    try:
+        table = agent.registry[('schema', schema), ('table', table)]
+        # map_handler should return whatever JSON-able object you want to send back
+        return agent.data_handler.get_latlong_data(
+            engine=engine,
+            lat=lat,
+            lon=lon,
+            table=table
+
+        )
+    except Exception as e:
+        # wrap any errors in an HTTPException so FastAPI can return a proper 4xx/5xx
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 5) Run it all together
 if __name__ == "__main__":

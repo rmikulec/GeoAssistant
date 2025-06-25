@@ -8,8 +8,6 @@ from plotly.graph_objects import Figure
 from geo_assistant.logging import get_logger
 from geo_assistant.table_registry import Table
 from geo_assistant.handlers._filter import HandlerFilter
-from geo_assistant.handlers._exceptions import InvalidTileservTableID
-from geo_assistant.config import Configuration
 
 logger = get_logger(__name__)
 

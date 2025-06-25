@@ -257,7 +257,7 @@ class GeoAgent:
                         value=filter_details['value'],
                         op=filter_details['operator'],
                     ))
-                table = self.registry[('table', kwargs['table'])][0]
+                table = self.registry[('table', kwargs['table'])]
                 self.map_handler._add_map_layer(
                     table=table,
                     layer_id=kwargs['layer_id'],
@@ -450,7 +450,7 @@ class GeoAgent:
                 if table_name not in analysis.final_tables:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
-                    self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
+                    self.registry[('schema', schema), ('table', table)]._drop(self.engine)
         if self.socket_emit:
             await self.socket_emit(
                 {

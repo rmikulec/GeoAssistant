@@ -1,5 +1,5 @@
 import requests
-from typing import Self, Optional, Any, Sequence
+from typing import Self, Sequence, Union
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import ProgrammingError
@@ -222,7 +222,7 @@ class TableRegistry:
                 self.drop_schema(engine, schema)
 
 
-    def __getitem__(self, key) -> list[Table]:
+    def __getitem__(self, key) -> Union[Table, list[Table]]:
         """
         Example usage
 
@@ -295,7 +295,10 @@ class TableRegistry:
                         new_candidates.append(filtered)
                 candidates = new_candidates
 
-        return candidates
+        if len(candidates) == 1:
+            return candidates[0]
+        else:
+            return candidates
 
     def drop_schema(self, engine: Engine, schema_name: str) -> None:
         """
