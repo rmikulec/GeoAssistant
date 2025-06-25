@@ -4,6 +4,7 @@ import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.wsgi import WSGIMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from geo_assistant.dash_app import create_dash_app
 from geo_assistant.agent._agent import GeoAgent
 from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
@@ -16,13 +17,20 @@ logger = get_logger(__name__)
 
 # 1) Create the FastAPI app
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8200"],  # or ["*"] 
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # 2) Initialize your GeoAgent (or other shared state)
 engine = create_engine(Configuration.db_connection_url)
 agent = GeoAgent(
     engine=engine,
     map_handler=PlotlyMapHandler(),
-    data_handler=PostGISHandler(default_table="pluto"),
+    data_handler=PostGISHandler(),
 )
 
 # 3) Mount the Dash app under /dash
@@ -64,10 +72,8 @@ async def get_map_figure():
     # Convert to Plotly JSON
     return JSONResponse(content=fig.to_plotly_json())
 
-@app.get("/query/lat_long/{schema}.{table}/{lat}/{long}")
+@app.get("/query/lat-long/{lat}/{lon}")
 def query_lat_long(
-    schema: str,
-    table: str,
     lat: float,
     lon: float
 ):
@@ -76,18 +82,15 @@ def query_lat_long(
     Delegates to agent.map_handler under the hood.
     """
     try:
-        table = agent.registry[('schema', schema), ('table', table)]
         # map_handler should return whatever JSON-able object you want to send back
         return agent.data_handler.get_latlong_data(
             engine=engine,
             lat=lat,
             lon=lon,
-            table=table
-
         )
     except Exception as e:
         # wrap any errors in an HTTPException so FastAPI can return a proper 4xx/5xx
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 # 5) Run it all together
 if __name__ == "__main__":

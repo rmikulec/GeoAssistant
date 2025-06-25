@@ -257,7 +257,7 @@ class GeoAgent:
                         value=filter_details['value'],
                         op=filter_details['operator'],
                     ))
-                table = self.registry[('table', kwargs['table'])]
+                table = self.registry[('table', kwargs['table'])][0]
                 self.map_handler._add_map_layer(
                     table=table,
                     layer_id=kwargs['layer_id'],
@@ -265,6 +265,7 @@ class GeoAgent:
                     style=kwargs['style'],
                     color=kwargs['color']
                 )
+                self.data_handler.active_tables.append(table)
                 # Run the function with the new filter arg injected
                 try:
                     kwargs['filters'] = filters

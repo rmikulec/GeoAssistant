@@ -222,7 +222,7 @@ class TableRegistry:
                 self.drop_schema(engine, schema)
 
 
-    def __getitem__(self, key) -> Union[Table, list[Table]]:
+    def __getitem__(self, key) -> list[Table]:
         """
         Example usage
 
@@ -295,10 +295,7 @@ class TableRegistry:
                         new_candidates.append(filtered)
                 candidates = new_candidates
 
-        if len(candidates) == 1:
-            return candidates[0]
-        else:
-            return candidates
+        return candidates
 
     def drop_schema(self, engine: Engine, schema_name: str) -> None:
         """

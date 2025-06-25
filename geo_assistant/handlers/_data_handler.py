@@ -15,17 +15,17 @@ class PostGISHandler:
     """
     A handler class to interact with PostGIS tables and create spatial views for pg_tileserv.
     """
-    def __init__(self, default_table: Optional[str] = Configuration.default_table):
-        self.default_table = default_table
+    def __init__(self):
         # tracks names of created SQL views
-        self.currently_selected = []
+        # TODO: Make this a dict, where key is table schema.name and values are associated filters
+        #   That way the queries can automatically use the filters to narrow down results
+        self.active_tables: list[Table] = []
 
     def get_latlong_data(
         self,
         engine: Engine,
         lat: float,
         lon: float,
-        table: Table,
         line_tolerance: Optional[int] = 10
     ) -> gpd.GeoDataFrame:
         """
@@ -42,18 +42,27 @@ class PostGISHandler:
         Returns:
             GeoDataFrame: A DataFrame containing all rows that intersected with the given lat/long
         """
-        results = execute_template_sql(
-            template_name="lat_long",
-            engine=engine,
-            lat=lat,
-            lon=lon,
-            tolerance_meters=line_tolerance,
-            schema=table.schema,
-            table=table.name
-            
-        )
+        if self.active_tables:
+            table = self.active_tables[0]
+            results = execute_template_sql(
+                template_name="lat_long",
+                engine=engine,
+                lat=lat,
+                lon=lon,
+                tolerance_meters=line_tolerance,
+                schema=table.schema,
+                table=table.name
+                
+            )
 
-        return results
+            results = [
+                {k: v for k, v in result.items() if k != Configuration.geometry_column}
+                for result in results
+            ]
+
+            return results
+        else:
+            return []
 
 
     def filter_count(
