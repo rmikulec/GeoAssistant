@@ -5,7 +5,8 @@ import requests
 import logging
 from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update, dcc
 import dash_bootstrap_components as dbc
-from dash_extensions import WebSocket
+from dash_extensions import WebSocket, EventListener
+from dash_extensions.javascript import Namespace
 from dash.exceptions import PreventUpdate
 
 import geo_assistant.components as gac
@@ -27,6 +28,10 @@ def create_dash_app(initial_figure: dict) -> Dash:
     dash_app = Dash(
         __name__,
         external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
+        external_scripts=[
+            "https://code.jquery.com/jquery-3.6.0.min.js",
+            "https://cdn.plot.ly/plotly-3.0.1.min.js"
+        ],
         suppress_callback_exceptions=True,
     )
 
@@ -34,12 +39,24 @@ def create_dash_app(initial_figure: dict) -> Dash:
     dash_app.layout = html.Div([
         # Plain WebSocket client pointed at your FastAPI /ws endpoint
         WebSocket(id="ws", url="ws://localhost:8000/ws"),
-        dcc.Graph(
-            id="map-graph", 
-            config={"displayModeBar": False},
-            figure=initial_figure,
-            style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
+        EventListener(
+            html.Div(
+                dcc.Graph(
+                    id="map-graph",
+                    figure=initial_figure,
+                    config={"scrollZoom": True},
+                    #style={"position": "absolute", "top": 0, "left": 0, "right": 0, "bottom": 0},
+                ),
+                id="map-graph-container"
+            ),
+            events=[{
+                "event": "plotlyMapClick",
+                "props": ["detail.lon", "detail.lat"]
+            }],
+            id="map-listener",
+            logging=True,  # logs in console on each event
         ),
+        html.Div(id="coords-display"),
         html.Div(
             dbc.Button(
                 dcc.Loading(
@@ -93,9 +110,16 @@ def create_dash_app(initial_figure: dict) -> Dash:
         logger.info('Map updating...')
         return json.loads(payload["figure"])
 
+    @dash_app.callback(
+        Output("coords-display", "children"),
+        Input("map-listener", "n_events"),
+        prevent_initial_call=True,
+    )
+    def debug_n(n_events):
+        logger.info(n_events)
+        return f"n_events = {n_events}"
+
     return dash_app
-
-
 if __name__ == "__main__":
     # Get the original figure from the serveer
     initial_figure = requests.get(url="http://127.0.0.1:8000/map-figure")
