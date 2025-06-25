@@ -1,27 +1,31 @@
 # dash_app.py
 
 import json
+import requests
+import logging
 from dash import Dash, html, dcc, Input, Output, State, callback_context, no_update
 import dash_bootstrap_components as dbc
 from dash_extensions import WebSocket
 from dash.exceptions import PreventUpdate
 
-from geo_assistant.logging import get_logger
-logger = get_logger(__name__)
 
-def create_dash_app(server, initial_figure):
+logger = logging.getLogger(__name__)
+
+def create_dash_app(initial_figure):
     # ─── Initialize your GeoAgent ────────────────────────────────────────────────
 
     # ─── Create Dash, mounted under /dash/ ────────────────────────────────────────
     dash_app = Dash(
         __name__,
-        requests_pathname_prefix="/dash/",
+        #requests_pathname_prefix="/dash/",
         external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
         suppress_callback_exceptions=True,
     )
 
     # ─── Layout ───────────────────────────────────────────────────────────────────
     dash_app.layout = html.Div([
+        # Plain WebSocket client pointed at your FastAPI /ws endpoint
+        WebSocket(id="ws", url="ws://localhost:8000/ws"),
         dcc.Graph(
             id="map-graph", 
             config={"displayModeBar": False},
@@ -71,9 +75,6 @@ def create_dash_app(server, initial_figure):
                         className="glass-button",
                     ),
                 ], className="mt-auto"),
-
-                # Plain WebSocket client pointed at your FastAPI /ws endpoint
-                WebSocket(id="ws", url="ws://localhost:8000/ws"),
             ],
             style={"height":"100%","display":"flex","flexDirection":"column"}),
             id="chat-drawer",
@@ -99,92 +100,138 @@ def create_dash_app(server, initial_figure):
             return not is_open
         return is_open
 
-    # 2) Single callback for both sending user messages and handling WS messages
     @dash_app.callback(
-        # When sending: we push text into the WS via its `send` prop...
         Output("ws", "send"),
-        # ...and we immediately append the user message to the log + clear the input
-        Output("chat-log", "children"),
         Output("chat-input", "value"),
-        Output("map-graph", "figure"),
-
-        # We also listen for incoming WS frames to append analysis/AI updates
         Input("send-btn", "n_clicks"),
-        Input("ws", "message"),
         State("chat-input", "value"),
+        prevent_initial_call=True,
+    )
+    def send_user_message(n_clicks, message):
+        if not message:
+            raise PreventUpdate
+        payload = json.dumps({"type": "user", "message": message})
+        # send text, then clear the input
+        return payload, ""
+    
+        # ─── Helper: insert or replace an “analysis” div ───────────────────────────
+    def _upsert_analysis(log, payload):
+        """
+        Given the existing list `log` and the WS payload, return a brand-new list
+        where a <Div id="analysis-{id}"> is replaced if present, or appended otherwise.
+        """
+        aid  = str(payload["id"])
+        txt  = payload.get("message", "")
+        prog = payload.get("progress")
+
+        # 1) Build the new analysis Div
+        children = [html.Div(txt, className="analysis-message-text")]
+        if prog is not None:
+            children.append(
+                dbc.Progress(
+                    value=int(prog * 100),
+                    max=100,
+                    striped=True,
+                    animated=True,
+                    style={"height": "6px", "marginTop": "4px"},
+                    color="info",
+                )
+            )
+        new_div = html.Div(
+            children,
+            id=f"analysis-{aid}",
+            className="chat-message assistant-message",
+        )
+
+        # 2) Helper to extract an existing child's id
+        def _get_id(child):
+            # Dash component: use .id
+            if hasattr(child, "id"):
+                return child.id
+            # plain-dict serialization: look in props
+            return child.get("props", {}).get("id")
+
+        desired_id = f"analysis-{aid}"
+        new_log = []
+        replaced = False
+
+        # 3) Iterate and replace if we find the same id
+        for child in log or []:
+            existing_id = _get_id(child)
+            # DEBUG: you can uncomment the next line to see what's in your log
+            # logger.info(f"Child {type(child)} has id={existing_id!r}")
+
+            if existing_id == desired_id:
+                new_log.append(new_div)
+                replaced = True
+            else:
+                new_log.append(child)
+
+        # 4) If we never found it, append at the end
+        if not replaced:
+            new_log.append(new_div)
+
+        return new_log
+
+
+
+# ——————————————————————————————————————————————————————————————————————
+    # 1) Only update the chat-log
+    @dash_app.callback(
+        Output("chat-log", "children"),
+        Input("ws", "message"),
         State("chat-log", "children"),
         prevent_initial_call=True,
     )
-    def update_chat(n_clicks, ws_msg, new_message, log):
-        log = log or []
-        trig = callback_context.triggered_id
+    def update_chat_log(ws_msg, log):
+        if not ws_msg or "data" not in ws_msg:
+            raise PreventUpdate
+        
+        payload = json.loads(ws_msg["data"])
+        typ = payload.get("type")
+        if typ == "figure_update":
+            raise PreventUpdate
+        logger.info(f"Message Recieved: {ws_msg}")
 
-        # — User clicked “send”
-        if trig == "send-btn":
-            if not new_message:
-                raise PreventUpdate
-            # append user bubble
-            log.append(html.Div(new_message, className="chat-message user-message"))
-            # send it down the socket to FastAPI
-            payload = json.dumps({"type": "user", "message": new_message})
-            return payload, log, "", no_update
+        text    = payload.get("message", "")
+        log      = list(log or [])
 
-        # — We received a server‐push update
-        if trig == "ws":
-            if not ws_msg or "data" not in ws_msg:
-                raise PreventUpdate
-            payload = json.loads(ws_msg["data"])
-            typ  = payload.get("type")
-            txt  = payload.get("message", "")
-            prog = payload.get("progress")
+        if typ == "analysis":
+            return _upsert_analysis(log, payload)
 
-            if typ == "analysis":
-                analysis_id = payload.get("id")
-                # build the children for this analysis div
-                children = [html.Div(txt, className="analysis-message-text")]
-                if prog is not None:
-                    children.append(
-                        dbc.Progress(
-                            value=int(prog * 100),
-                            max=100,
-                            striped=True,
-                            animated=True,
-                            style={"height": "6px", "marginTop": "4px"},
-                            color="info",
-                        )
-                    )
+        if typ == "ai_response":
+            log.append(html.Div(text, className="chat-message assistant-message"))
+            return log
 
-                # our stable div id
-                div_id = f"analysis-{analysis_id}"
+        # catch-all for other small messages
+        log.append(html.Div(text, className="chat-message"))
+        return log
 
-                # try to find an existing entry in log with that id
-                existing_idx = next(
-                    (i for i, child in enumerate(log)
-                    if getattr(child, "props", {}).get("id") == div_id),
-                    None
-                )
-                logger.info(f"Existing id: {existing_idx}")
-                new_div = html.Div(children, id=div_id, className="chat-message assistant-message")
+    # ——————————————————————————————————————————————————————————————————————
+    # 2) Only update the figure
+    @dash_app.callback(
+        Output("map-graph", "figure"),
+        Input("ws", "message"),
+        State("map-graph", "figure"),
+        prevent_initial_call=True,
+    )
+    def update_map_figure(ws_msg, current_fig):
+        if not ws_msg or "data" not in ws_msg:
+            raise PreventUpdate
 
-                if existing_idx is not None:
-                    # replace the old one
-                    log[existing_idx] = new_div
-                else:
-                    # first time: append it
-                    log.append(new_div)
+        payload = json.loads(ws_msg["data"])
+        if payload.get("type") != "figure_update":
+            # no_change for non-figure messages
+            raise PreventUpdate
+        logger.info('Map updating...')
+        return json.loads(payload["figure"])
 
-            elif typ == "ai_response":
-                log.append(html.Div(txt, className="chat-message assistant-message"))
-            elif typ == "figure_update":
-                figure = json.loads(payload.get("figure"))
-                return no_update, no_update, no_update, figure
-            else:
-                # fallback for other event types
-                log.append(html.Div(txt, className="chat-message"))
 
-            return no_update, log, no_update, no_update
-
-        # Otherwise—nothing to do
-        raise PreventUpdate
 
     return dash_app
+
+
+if __name__ == "__main__":
+    initial_figure = requests.get(url="http://127.0.0.1:8000/map-figure")
+    app = create_dash_app(initial_figure=initial_figure.json())
+    app.run(port=8200)

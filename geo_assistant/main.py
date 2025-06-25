@@ -26,8 +26,8 @@ agent = GeoAgent(
 )
 
 # 3) Mount the Dash app under /dash
-dash_app = create_dash_app(app, agent.map_handler.figure)
-app.mount("/dash", WSGIMiddleware(dash_app.server))
+#dash_app = create_dash_app(app, agent.map_handler.figure)
+#app.mount("/dash", WSGIMiddleware(dash_app.server))
 # (Dash’s own WSGI/AWSGI app is dash_app.server, and FastAPI is ASGI,
 #  so behind the scenes Starlette wraps that for you.)
 
@@ -41,6 +41,7 @@ async def websocket_endpoint(ws: WebSocket):
             raw = await ws.receive_text()
             data = json.loads(raw)
             logger.info(f"Message recieved: {raw}")
+            await ws.send_text(json.dumps({'type': "user_message", "message": raw}))
 
             # only handle user messages
             if data.get("type") != "user":
@@ -65,4 +66,7 @@ async def get_map_figure():
 
 # 5) Run it all together
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    try:
+        uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    finally:
+        agent.registry.cleanup(agent.engine)

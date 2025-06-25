@@ -337,7 +337,7 @@ class GeoAgent:
         Args:
             - query(str): Text descibing what the analysis should accomplish
         """
-        analysis_id = hash(query)
+        analysis_id = str(abs(hash(query)))
         if self.socket_emit:
             await self.socket_emit(
                 {

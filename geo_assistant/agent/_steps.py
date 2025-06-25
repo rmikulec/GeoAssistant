@@ -145,7 +145,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
     have a template in 'geo_assistant/agent/templates' with the same name as `_type`. Model fields
     will automatically be injected into that jinja template
     """
-    _type: Literal["base"] = "base"
+    step_type: Literal["base"] = "base"
     output_table: str = Field(..., description="Name of table being created")
 
     def _get_geometry_type(
@@ -211,7 +211,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
         other_args = self.model_dump(exclude=exclude_args)
         execute_template_sql(
             engine=engine,
-            template_name=self._type,
+            template_name=self.step_type,
             geometry_column=Configuration.geometry_column,
             srid=3857,
             gtype=geometry_type,
@@ -232,13 +232,13 @@ class _FilterStep(_SQLStep):
     """
     Filter step that runs a basic `WHERE` clause
     """
-    _type: Literal['filter'] = "filter"
+    step_type: Literal['filter'] = "filter"
     select: list[_Field]
     source_table: _SourceTable
     filters: list[_FilterItem]
 
     @classmethod
-    def _build_step_model(cls, fields_enum: type[Enum], tables_enum: type[Enum]) -> Type[Self]:
+    def _build_step_model(cls, fields_enum: Type[Enum], tables_enum: Type[Enum]) -> Type[Self]:
         """
         Needs a special build function to inject field enum into the subsequent filter classes.
         """
@@ -282,7 +282,7 @@ class _MergeStep(_SQLStep):
     """
     SQL Step to run a basic `JOIN` clause
     """
-    _type: Literal['merge'] = "merge"
+    step_type: Literal['merge'] = "merge"
     left_select: list[_Field]
     right_select: list[_Field]
     left_table: _SourceTable
@@ -305,7 +305,7 @@ class _AggregateStep(_SQLStep):
     """
     SQL Step to run a basic `GROUP BY` clause
     """
-    _type: Literal['aggregate'] = "aggregate"
+    step_type: Literal['aggregate'] = "aggregate"
     select: list[_Field]
     source_table: _SourceTable
     aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
@@ -321,7 +321,7 @@ class _AggregateStep(_SQLStep):
     output_table: str = Field(..., description="Name of the aggregated table")
 
     @classmethod
-    def _build_step_model(cls, fields_enum: type[Enum], tables_enum: type[Enum]) -> Type[Self]:
+    def _build_step_model(cls, fields_enum: Type[Enum], tables_enum: Type[Enum]) -> Type[Self]:
         """
         Needs a special build function to inject fields enum into the Aggregator classes
         """
@@ -343,7 +343,7 @@ class _BufferStep(_SQLStep):
     """
     SQL Step to run a GIS Buffer analysis
     """
-    _type: Literal['buffer'] = "buffer"
+    step_type: Literal['buffer'] = "buffer"
     source_table: _SourceTable
     buffer_distance: float = Field(..., description="Distance to buffer")
     buffer_unit: Literal['meters','kilometers'] = Field(
@@ -356,7 +356,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
     """
     Reporting step to export data as a Plotly Map Layer
     """
-    _type: Literal["addLayer"] = "addLayer"
+    step_type: Literal["addLayer"] = "addLayer"
     source_table: _SourceTable
     layer_id: str = Field(description="The id of the new map layer")
     color: str = Field(description="Hex value of the color of the geometries")
@@ -373,7 +373,7 @@ class _PlotlyMapLayerStep(_ReportingStep):
     
 
 class _SaveTable(_ReportingStep):
-    _type: Literal["saveTable"] = "saveTable"
+    step_type: Literal["saveTable"] = "saveTable"
     source_table: _SourceTable
 
     def export(self):
