@@ -219,6 +219,13 @@ class _SQLStep(_GISAnalysisStep, ABC):
             **other_args
         )
 
+        execute_template_sql(
+            engine=engine,
+            template_name="postprocess",
+            schema=schema,
+            table=self.output_table
+        )
+
         # Return a `TableCreated` reporting item
         return TableCreated(
             name=self.name,

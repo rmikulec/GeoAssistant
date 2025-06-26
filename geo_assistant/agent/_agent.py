@@ -1,27 +1,23 @@
-"""
-GeoAgent: An LLM-driven agent to manage a map and build/run GIS Analytics
-"""
-
-from dotenv import load_dotenv
-load_dotenv()
-
-from geo_assistant.logging import get_logger
-import pathlib
-import openai
 import json
-
-from fastapi import WebSocket
-from openai.types.responses import ParsedResponse
-from typing import Callable, Any
-from jinja2 import Template
+import pathlib
+from typing import Callable, Literal
 from sqlalchemy import Engine
+from openai.types.responses import ParsedResponse
+from jinja2 import Template
 
-from geo_assistant import tools
-from geo_assistant.table_registry import TableRegistry
-from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler, HandlerFilter
-from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
+# Import for declaring agent
+from geo_assistant.agent._base import BaseAgent, tool, tool_type, system_message, postchat
+from geo_assistant.agent.updates import EmitUpdate, Status
+
+# Import geo assisant stuff
 from geo_assistant.config import Configuration
+from geo_assistant.logging import get_logger
+from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
+from geo_assistant.table_registry import TableRegistry
+from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
+from geo_assistant.handlers._filter import HandlerFilter
 
+# Analysis imports
 from geo_assistant.agent.analysis import _GISAnalysis
 from geo_assistant.agent.analysis.report import TableCreated, PlotlyMapLayerArguements
 
@@ -41,61 +37,46 @@ Here is the current status of the map:
 {map_status}
 
 Here is any other relevant information:
-{supplement_information}
+{context}
+
+Here are the tables that are available:
+{tables}
 """
 
 
-class GeoAgent:
+class FigureUpdate(EmitUpdate):
     """
-    OpenAI powered agent to filter parcels and answer user questions
-
-    Methods:
-        - chat(user_message: str, field_defs: list[dict]): Function used to 'chat' with the
-            GeoAgent. To use, must pass a user-message and a list of field definitions. Chat will
-            then use OpenAI SDK to select proper filters (based on the field definitions) and
-            answer the user in a conversational way
-        - run_analysis(query: str): Builds and runs a analysis by preplaning a variety of steps,
-            querying databases, and building a report to be interpreted by the agent or returned
-            to the user
-
-    Args:
-        engine (Engine): A sqlaclemeny engine for querying the database for info and running
-            analysis to build tables
-        map_handler (MapHandler): Class used to manage the state of a plotly map box
-        data_handler (DataHandler): Class used to quickly query the database for relevant info
-        field_store (FieldDefinitionStore): Field Definition Vector store to ensure relevant field
-            definitions are injected into the prompt on each run. If left blank, will default to
-            the version found in `geo_assistant.config`
-        info_store (SupplementalInfoStore): Info vector store to ensure relevant generic
-            information (usually parsed from a GIS dataset metadata pdf) is injected into the
-            prompt. If left blank, will default to the version found in `geo_assistant.config`
-        model (str): The name of the OpenAI model to use for inference. If left blank, will default
-            to the version found in `geo_assistant.config`
-        use_smart_search (bool): Flag to use a "smart search" feature. If true, this will enable
-            the agent to call OpenAI to generate keywords to search the vector stores with, rather
-            than relying on the base user message. The keywords generated use the entire
-            conversation as context, potentially catching tricker use cases. Defaults to False.
+    New update that sends over an updated plotly json
     """
+    type: Literal['figure_update'] = 'figure_update'
+    figure: str
 
+
+
+class AnalysisUpdate(EmitUpdate):
+    type: Literal['analysis'] = 'analysis'
+    id: str
+    query: str
+    step: str
+    progress: float
+
+
+class GeoAgent(BaseAgent):
     def __init__(
-        self, 
-        engine: Engine,
-        map_handler: PlotlyMapHandler,
-        data_handler: PostGISHandler,
-        field_store: FieldDefinitionStore = None,
-        info_store: SupplementalInfoStore = None,
-        model: str = Configuration.inference_model,
-        use_smart_search: bool = False,
-        socket_emit: Callable = None
-    ):
-        self.model: str = model
+            self, 
+            engine: Engine, 
+            map_handler: PlotlyMapHandler, 
+            data_handler: PostGISHandler, 
+            field_store: FieldDefinitionStore = None,
+            info_store: SupplementalInfoStore = None, 
+            model: str = Configuration.inference_model, 
+            emitter: Callable=None
+        ):
+        super().__init__(model, emitter)
         self.engine: Engine = engine
-        self.use_smart_search: bool = use_smart_search
         self.map_handler: PlotlyMapHandler = map_handler
         self.data_handler: PostGISHandler = data_handler
-        self.client: openai.AsyncOpenAI = openai.AsyncOpenAI(api_key=pathlib.Path("./openai.key").read_text())
         self.registry: TableRegistry = TableRegistry.load_from_tileserv(self.engine)
-        self.socket_emit = socket_emit
 
         # Set the field store depending if given or not
         if field_store is None:
@@ -109,366 +90,270 @@ class GeoAgent:
         else:
             self.info_store = info_store
 
-        # Iniate a base system message (this will be updated each run of `chat`)
-        self.messages = [
-            {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
-                    map_status="Graph not updated yet.",
-                    supplement_information=""
-                )    
-            }
-        ]
-
-        # Set the tool handlers for any potential available tools
-        self.tools: dict[str, Callable[..., Any]] = {
-            "add_map_layer":    self.map_handler._add_map_layer,
-            "remove_map_layer": self.map_handler._remove_map_layer,
-            "reset_map":        self.map_handler._reset_map,
-            "run_analysis":     self.run_analysis
-        }
-
-    def _set_websocket(self, websocket: WebSocket):
-        async def socket_emit(payload: dict):
-            # payload must be JSON-serializable
-            await websocket.send_text(json.dumps(payload))
-        self.socket_emit = socket_emit
-
-    @property
-    def conversation(self):
-        """
-        A user-friendly export of the conversation so far, leaving out any `tool calls`
-        """
-        conversation_str = ""
-        for message in self.messages:
-            if not isinstance(message, dict):
-                # This will skip any tool messages
-                continue
-            if message.get('role', None) == 'assistant':
-                conversation_str+=f"\n GeoAssist: {message['content']}"
-            elif message.get('role', None) == 'user':
-                conversation_str+=f"\n User: {message['content']}"
-        return conversation_str
-    
-
-    def _update_dev_message(self, context: str):
-        """
-        Private function to update the current system message
-        """
-        self.messages[0] = {'role': 'developer', 'content': GEO_AGENT_SYSTEM_MESSAGE.format(
-                map_status=json.dumps(self.map_handler.status,indent=2),
-                supplement_information=context
-            )    
-        }
-    
-
-    async def _get_field_defs(self, message: str, context: str = None, k: int = 5):
-        """
-        Private method to retrieve relevant field definitions from the vector store
-        """
-        conversation = self.conversation + f"\n User: {message}"
-        if self.use_smart_search:
-            field_defs = await self.field_store.smart_query(
-                message,
-                conversation=conversation,
-                context=context,
-                k=k
-            )
-        else:
-            field_defs = await self.field_store.query(message, k=k)
-        return field_defs
-
-
-    async def chat(self, user_message: str) -> str:
-        """
-        Function used to 'chat' with the
-            GeoAgent. To use, must pass a user-message and a list of field definitions. Chat will
-            then use OpenAI SDK to select proper filters (based on the field definitions) and
-            answer the user in a conversational way
-
-        Args:
-            user_message(str): The message inputed by the user
-        Returns:
-            str: The message generated by the LLM to return to the user
-        """
-        self.registry = TableRegistry.load_from_tileserv(self.engine)
-        # Add the user message to the message log
-        self.messages.append({'role': 'user', 'content': user_message})
-        logger.debug(f"User message: {user_message}")
-
-        # Search info vector store and update dev message
-        context_search = await self.info_store.query(user_message, k=3)
-        context = "\n".join([result['markdown'] for result in context_search])
-        self._update_dev_message(context)
-        # Search the field vector store and pull out a list of tables
-        field_defs = await self._get_field_defs(user_message, context)
-        field_defs = self.registry.verify_fields(field_defs)
-        field_names = [field_def['name'] for field_def in field_defs]
-        tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
-        # Build out available tools
-        # TODO: Make this more robust and easier to add tools in the workflow
-        tool_defs = [
-            tools._build_add_layer_def(
-                tables=[table.name for table in tables],
-                field_defs=field_defs
-            ),
-            tools._build_remove_layer_def(self.map_handler),
-            tools._build_reset_def(),
-            tools._build_run_analysis()
-        ]
-
-        # Call openai
-        res = await self.client.responses.create(
-            model=self.model,
-            input=self.messages,
-            tools=tool_defs
-        )
-
-        # Tool call loop:
-        #   for each tool, extract args and make appropriate calls, keeping track of messages
-        #   and proprely handling errors
-        made_tool_calls = False
-        for tool_call in res.output:
-            # Validate that a tool was called
-            self.messages.append(tool_call)
-            if tool_call.type != "function_call":
-                continue
-            made_tool_calls = True
-
-            # Extract info from call content
-            kwargs = json.loads(tool_call.arguments)
-            logger.info(f"Calling {tool_call.name} with kwargs: {kwargs}")
-
-            # Special case for adding a layer to the map
-            #   CQL filters must be build out before adding
-            if tool_call.name == "add_map_layer":   
-                # Extract filters from the kwargs
-                # TODO: Clean up this logic to be less-convoluted
-                filter_names = [
-                    name
-                    for name in kwargs.keys()
-                    if name not in ['layer_id', 'color', 'style', 'table']
-                ]
-                filters = []
-                for filter_name in filter_names:
-                    filter_details = kwargs.pop(filter_name)
-                    filters.append(HandlerFilter(
-                        field=filter_name,
-                        value=filter_details['value'],
-                        op=filter_details['operator'],
-                    ))
-                table = self.registry[('table', kwargs['table'])][0]
-                self.map_handler._add_map_layer(
-                    table=table,
-                    layer_id=kwargs['layer_id'],
-                    filters=filters,
-                    style=kwargs['style'],
-                    color=kwargs['color']
-                )
-                self.data_handler.active_tables.append(table)
-                # Run the function with the new filter arg injected
-                try:
-                    kwargs['filters'] = filters
-                    kwargs['table'] = table
-                    self.tools['add_map_layer'](**kwargs)
-                    # This tool has a custom response to handle how many parcels were selected
-                    tool_response = f"{self.data_handler.filter_count(self.engine, filters)} parcels found"
-                except Exception as e:
-                    logger.exception(e)
-                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
-            # Seperated to explicilty call asyncronhously
-            elif tool_call.name == "run_analysis":
-                try:
-                    tool_response = await self.run_analysis(**kwargs)
-                except Exception as e:
-                    logger.exception(e)
-                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
-            else:
-                try:
-                    tool_response = self.tools[tool_call.name](**kwargs)
-                except Exception as e:
-                    logger.exception(e)
-                    tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
-            # Update all data
-            logger.debug(f"Tool Response: {tool_response}")
-            # dev message should be updated with latest status of the map
-            self._update_dev_message(context=context)
-            self.messages.append({
-                "type": "function_call_output",
-                "call_id": tool_call.call_id,
-                "output": tool_response
-            })
-    
-        # Recall openai if any tool calls were made for a user-friendly resposne
-        if made_tool_calls:
-            if self.socket_emit:
-                map_json = self.map_handler.update_figure().to_json()
-                await self.socket_emit(
-                    {
-                        "type": "figure_update",
-                        "figure": map_json
-                    }
-                )
-            res = await self.client.responses.create(
-                model=self.model,
-                input=self.messages,
-            )
-        
-        ai_message = res.output_text
-        logger.debug(f"LLM reply: {ai_message}")
-        self.messages.append({'role': 'assistant', 'content': ai_message})
-
-        if self.socket_emit:
-            await self.socket_emit(
-                {
-                    "type": "ai_response",
-                    "message": ai_message
-                }
-            )
-
-        return ai_message
-    
-
-    async def run_analysis(self, query: str):
-        """
-        Runs an analysis given a user message. This is a more time consuming process than 'chat',
-        as it forces the agent to *think* and plan steps, then executes sql to create tables for
-        the analysis
-
-        Args:
-            - query(str): Text descibing what the analysis should accomplish
-        """
-        analysis_id = str(abs(hash(query)))
-        if self.socket_emit:
-            await self.socket_emit(
-                {
-                    "type": "analysis",
-                    "id": analysis_id,
-                    "query": query,
-                    "step": "Generating analysis plan...",
-                    "status": "generate",
-                    "progress": 1
-                }
-            )
-        logger.info(f"Running analysis for query: {query}")
-        # Setup the system message template
-        system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
-        # Query for relevant fields
-        field_defs = await self.field_store.query(query, k=15)
-        field_defs = self.registry.verify_fields(field_defs)
-        field_names = [field['name'] for field in field_defs]
-        # Query registry for all tables that make up the set of fields
-        tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
-        logger.debug(f"Tables: {tables}")
-        # Create a new Analysis Model with those fields as Enums (This forces the model to only
-        #   use valid fields)
-        DynGISModel = _GISAnalysis.build_model(
-            fields=field_names,
+    @system_message
+    async def _system_message(self, user_message: str):
+        # load context and inject as system prompt
+        tables = self.registry[('schema', 'base')]
+        context = await self.info_store.query(user_message, k=3)
+        context = "\n\n".join(r['markdown'] for r in context)
+        return GEO_AGENT_SYSTEM_MESSAGE.format(
+            map_status=self.map_handler.status,
+            context=context,
             tables=[table.name for table in tables]
         )
-        # Query for relative info
-        context = await self.info_store.query(query, k=10)
-        # Generate the system message
-        system_message = system_message_template.render(
-            field_definitions=field_defs,
-            context_info=context,
-            tables=tables
-        )
-        logger.debug(system_message)
-        
-        try:
-            # Hit openai to generate a step-by-step plan for the analysis
-            res: ParsedResponse[_GISAnalysis] = openai.Client(api_key=Configuration.openai_key).responses.parse(
-                input=[
-                    {'role': 'system', 'content': system_message},
-                    {'role': 'user', 'content': query}
-                ],
-                model="o4-mini",
-                reasoning={
-                    "effort":"high",
-                },
-                text_format=DynGISModel
-            )
-            analysis = res.output_parsed
-        except Exception as e:
-            if self.socket_emit:
-                await self.socket_emit(
-                    {
-                        "type": "analysis",
-                        "id": analysis_id,
-                        "query": query,
-                        "step": "Analysis plan failed to generate.",
-                        "status": "error",
-                        "progress": 1.0
-                    }
-                )
-            raise e
-        logger.info(analysis.model_dump_json(indent=2))
-        # Run through the steps, executing each query
-        logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
 
-        try:
-            # Execute and gather the report
-            report = await analysis.execute(
-                id_=analysis_id, 
-                engine=self.engine, 
-                socket_emit=self.socket_emit,
-                query=query
+    async def _emit_figure(self, fig: str):
+        if self.emitter:
+            await self.emitter(
+                FigureUpdate(
+                    status=Status.SUCCEDED,
+                    figure=json.dumps(fig)
+                )
             )
-            # Perform any actions required based on the report
-            for item in report.items:
-                if isinstance(item, TableCreated):
-                    table = self.registry.register(
-                        id_=f"{analysis.name}.{item.table_created}",
-                        engine=self.engine
+
+    @tool_type(
+        name="filter",
+        description="One CQL filter clause"
+    )
+    async def _build_filter_type(self, user_message: str) -> dict[str, dict]:
+        """
+        Returns a map of JSON-Schema properties for a single filter clause.
+        """
+        fields = await self.field_store.query(user_message)
+        return {
+            "field": {
+                "type": "string",
+                "enum": [f["name"] for f in fields],
+                "description": json.dumps(fields),
+            },
+            "op": {
+                "type": "string",
+                "enum": [
+                    "equal",
+                    "greaterThan",
+                    "lessThan",
+                    "greaterThanOrEqual",
+                    "lessThanOrEqual",
+                    "notEqual",
+                    "contains",
+                ],
+            },
+            "value": {"type": "string"},
+        }
+
+    @tool(
+        name="add_map_layer",
+        description="Add a layer to the map with optional CQL filters",
+        params={
+            "table":    {"type":"string", "enum": lambda self: [t.name for t in self.registry[('schema', 'base')]]},
+            "layer_id": {"type":"string"},
+            "style":    {"type":"string"},
+            "color":    {"type":"string", "description": "A hex value for the color of the layer"},
+            "filters":  {"type": "array", "items": {"type": "#filter"}},
+        },
+        required=["table","layer_id", "color"],
+    )
+    async def add_map_layer(self, table: str, color: str, layer_id: str, style: str = 'line', filters: list[dict]=None) -> str:
+        if filters:
+            filters = [
+                HandlerFilter(**filter_)
+                for filter_ in filters
+            ]
+        table = self.registry[('table', table)][0]
+        self.map_handler._add_map_layer(
+            table=table, 
+            filters=filters, 
+            style=style, 
+            color=color, 
+            layer_id=layer_id
+        )
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
+        count = self.data_handler.filter_count(self.engine, table, filters)
+        return f"Layer {layer_id} add with {count} rows"
+
+    @tool(
+        name="remove_map_layer",
+        description="Remove a layer by its ID",
+        params={"layer_id":{"type":"string", "enum": lambda self: list(self.map_handler.map_layers.keys())}},
+        required=["layer_id"],
+    )
+    async def remove_map_layer(self, layer_id: str) -> bool:
+        self.map_handler._remove_map_layer(layer_id)
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
+        return f"Layer {layer_id} removed from map"
+
+    @tool(
+        name="reset_map",
+        description="Resets the map, removing all layers",
+    )
+    async def reset_map(self):
+        self.map_handler._reset_map()
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
+        return "Map reseted"
+
+    @tool(
+        name="run_analysis",
+        description="Perform GIS Analysis, using differnt queries",
+        params={"query":{"type":"string", "description": "Description of what analysis should be done"}},
+        required=["query"],
+    )
+    async def run_analysis(self, query: str):
+            """
+            Runs an analysis given a user message. This is a more time consuming process than 'chat',
+            as it forces the agent to *think* and plan steps, then executes sql to create tables for
+            the analysis
+
+            Args:
+                - query(str): Text descibing what the analysis should accomplish
+            """
+            analysis_id = str(abs(hash(query)))
+            if self.emitter:
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        query=query,
+                        step="Generating analysis plan...",
+                        status=Status.GENERATING,
+                        progress=1
                     )
-                    table._postprocess(self.engine)
-                elif isinstance(item, PlotlyMapLayerArguements):
-                    logger.info(item)
-                    schema, table = item.source_table.split('.')
-                    table = self.registry[
-                        ('schema', schema),
-                        ('table', table)
-                    ][0]
-                    self.map_handler._add_map_layer(
-                        table=table,
-                        layer_id=item.layer_id,
-                        color=item.color
-                    )
-                else:
-                    logger.warning(
-                        f"Report item type {type(item)} handler not implemented"
-                    )
-            report_succeded = True
-        except Exception as e:
-            logger.exception(e)
-            report_succeded = False
-        finally:
-            # No matter what, drop all the tables but the last possible
-            logger.debug(analysis.tables_created)
-            logger.debug(analysis.final_tables)
-            self.registry.sync_tileserv(self.engine)
-            for table_name in analysis.tables_created:
-                if table_name not in analysis.final_tables:
-                    logger.info(f"Dropping {table_name}...")
-                    schema, table = table_name.split('.')
-                    self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-        if self.socket_emit:
-            await self.socket_emit(
-                {
-                    "type": "analysis",
-                    "id": analysis_id,
-                    "query": query,
-                    "step": "Complete",
-                    "status": "complete" if report_succeded else "error",
-                    "progress": 1.0
-                }
+                )
+
+                
+            logger.info(f"Running analysis for query: {query}")
+            # Setup the system message template
+            system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
+            # Query for relevant fields
+            field_defs = await self.field_store.query(query, k=15)
+            field_defs = self.registry.verify_fields(field_defs)
+            field_names = [field['name'] for field in field_defs]
+            # Query registry for all tables that make up the set of fields
+            tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
+            logger.debug(f"Tables: {tables}")
+            # Create a new Analysis Model with those fields as Enums (This forces the model to only
+            #   use valid fields)
+            DynGISModel = _GISAnalysis.build_model(
+                fields=field_names,
+                tables=[table.name for table in tables]
             )
-        if report_succeded:
+            # Query for relative info
+            context = await self.info_store.query(query, k=10)
+            # Generate the system message
+            system_message = system_message_template.render(
+                field_definitions=field_defs,
+                context_info=context,
+                tables=tables
+            )
+            logger.debug(system_message)
+            
+            try:
+                # Hit openai to generate a step-by-step plan for the analysis
+                res: ParsedResponse[_GISAnalysis] = await self.client.responses.parse(
+                    input=[
+                        {'role': 'system', 'content': system_message},
+                        {'role': 'user', 'content': query}
+                    ],
+                    model="o4-mini",
+                    reasoning={
+                        "effort":"high",
+                    },
+                    text_format=DynGISModel
+                )
+                analysis = res.output_parsed
+            except Exception as e:
+                # Capture any exceptions to emit an error then raise
+                if self.emitter:
+                    await self.emitter(
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            step="Analysis plan failed to generate.",
+                            query=query,
+                            status=Status.ERROR,
+                            progress=1.0
+                        )
+                    )
+                    
+                raise e
+            logger.info(analysis.model_dump_json(indent=2))
+            # Run through the steps, executing each query
+            logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
+
+            try:
+                async def _step_emitter(update_dict: dict):
+                    await self.emitter(
+                        AnalysisUpdate.model_validate(update_dict)
+                    )
+
+                # Execute and gather the report
+                report = await analysis.execute(
+                    id_=analysis_id, 
+                    engine=self.engine, 
+                    emitter=_step_emitter,
+                    query=query
+                )
+                # Perform any actions required based on the report
+                for item in report.items:
+                    if isinstance(item, TableCreated):
+                        table = self.registry.register(
+                            id_=f"{analysis.name}.{item.table_created}",
+                            engine=self.engine
+                        )
+                        table._postprocess(self.engine)
+                    elif isinstance(item, PlotlyMapLayerArguements):
+                        schema, table = item.source_table.split('.')
+                        table = self.registry[
+                            ('schema', schema),
+                            ('table', table)
+                        ][0]
+                        self.map_handler._add_map_layer(
+                            table=table, 
+                            color=item.color, 
+                            layer_id=item.layer_id
+                        )
+                        # Emit the udpated figure
+                        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
+                    else:
+                        logger.warning(
+                            f"Report item type {type(item)} handler not implemented"
+                        )
+                report_succeded = True
+            except Exception as e:
+                if self.emitter:
+                    await self.emitter(
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            query=query,
+                            step="Analysis failed to run.",
+                            status=Status.ERROR,
+                            progress=1.0
+                        )
+                    )
+                raise e
+            finally:
+                # No matter what, drop all the tables but the last possible
+                logger.debug(analysis.tables_created)
+                logger.debug(analysis.final_tables)
+                self.registry.sync_tileserv(self.engine)
+                for table_name in analysis.tables_created:
+                    if table_name not in analysis.final_tables:
+                        logger.info(f"Dropping {table_name}...")
+                        schema, table = table_name.split('.')
+                        self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
+            if self.emitter:
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        query=query,
+                        step="Complete",
+                        status=Status.SUCCEDED,
+                        progress=1.0
+                    )
+                )
+
             return (
                 f"GIS Analysis ran succussfully."
                 f"Report description:"
                 f"{report.model_dump_json(indent=2)}"
-            )
-        else:
-            return (
-                f"GIS Analysis failed."
             )

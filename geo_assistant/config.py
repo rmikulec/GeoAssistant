@@ -3,7 +3,7 @@ from pydantic import Field
 
 class DefaultConfiguration(BaseSettings):
     # OpenAI Configuration
-    openai_key: str = Field(default="no-key")
+    openai_key: str = Field(default='no-key')
     parsing_model: str = Field(default="o4-mini")
     inference_model: str = Field(default="gpt-4o")
     embedding_model: str = Field(default="text-embedding-3-small")
@@ -16,6 +16,8 @@ class DefaultConfiguration(BaseSettings):
     pg_tileserv_url: str = Field(default="http://127.0.0.1:7800")
     default_table: str = Field(default="pluto")
     log_level: str = Field(default="INFO")
+    map_box_style: str = Field(default="carto-darkmatter")
+
     # Database configuration
     db_name: str = Field(default="parcelsdb")
     db_username: str = Field(default="gisuser")

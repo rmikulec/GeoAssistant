@@ -1,7 +1,5 @@
 import geopandas as gpd
-from sqlalchemy import create_engine, text
-from typing import Optional, Union
-from collections import defaultdict
+from sqlalchemy import text
 
 from sqlalchemy import Engine
 
@@ -26,7 +24,7 @@ class PostGISHandler:
         engine: Engine,
         lat: float,
         lon: float,
-        line_tolerance: Optional[int] = 10
+        line_tolerance: int = 10
     ) -> gpd.GeoDataFrame:
         """
         Retrieves data from a table, that intersects with a given lat/long
@@ -68,6 +66,7 @@ class PostGISHandler:
     def filter_count(
         self,
         engine: Engine,
+        table: Table,
         filters: list[HandlerFilter] = None,
     ) -> int:
         """
@@ -81,11 +80,10 @@ class PostGISHandler:
         Returns:
             int: The number of rows that meet the criterial of the filter
         """
-        table = self.active_tables[0]
         total_count = 0
         if filters:
             where_clause = " AND ".join(f._to_sql() for f in filters)
-            sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name} WHERE {where_clause};"
+            sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name} AS {table.name} WHERE {where_clause};"
         else:
             sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name}"
         with engine.connect() as conn:
