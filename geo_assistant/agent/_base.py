@@ -232,7 +232,8 @@ class BaseAgent:
 
         # Begin the first pass on generating a response from openai
         if self.emitter:
-            self.emitter(
+            await _safe_run(
+                self.emitter,
                 AiUpdate(
                     status=Status.GENERATING,
                     message="Generating response..."
@@ -248,7 +249,8 @@ class BaseAgent:
             logger.exception(e)
             # On failure, emit an udpate, update the messages, and return a standard message
             if self.emitter:
-                self.emitter(
+                await _safe_run(
+                    self.emitter,
                     AiUpdate(
                         status=Status.ERROR,
                         message="Generation failed"
@@ -275,24 +277,26 @@ class BaseAgent:
             # Run the tool, emitting updates
             try:
                 if self.emitter:
-                    self.emitter(
+                    await _safe_run(
+                    self.emitter,
                         AiUpdate(
-                            status=Status.PROCESSING,
-                            tool_call=tool_call.name,
-                            tool_args=kwargs
-                        )
+                                status=Status.PROCESSING,
+                                tool_call=tool_call.name,
+                                tool_args=kwargs
+                            )
                     )
                 result = await _safe_run(handler, **kwargs)
             except Exception as e:
                 logger.exception(e)
                 result = f"Tool `{tool_call.name}` failed: {e}"
                 if self.emitter:
-                    self.emitter(
+                    await _safe_run(
+                        self.emitter,
                         AiUpdate(
-                            status=Status.ERROR,
-                            tool_call=tool_call.name,
-                            tool_args=kwargs
-                        )
+                                status=Status.ERROR,
+                                tool_call=tool_call.name,
+                                tool_args=kwargs
+                            )
                     )
 
             # Record output for LLM
@@ -312,7 +316,8 @@ class BaseAgent:
             except Exception as e:
                 logger.exception(e)
                 if self.emitter:
-                    self.emitter(
+                    await _safe_run(
+                        self.emitter,
                         AiUpdate(
                             status=Status.ERROR,
                             message="Generation failed"
@@ -330,7 +335,8 @@ class BaseAgent:
         self.messages.append({'role': 'assistant', 'content': ai_message})
 
         if self.emitter:
-            self.emitter(
+            await _safe_run(
+                self.emitter,
                 AiUpdate(
                     status=Status.SUCCEDED,
                     message=ai_message

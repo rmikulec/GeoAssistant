@@ -1,17 +1,27 @@
 import json
-from typing import Callable
+import pathlib
+from typing import Callable, Literal
 from sqlalchemy import Engine
+from openai.types.responses import ParsedResponse
+from jinja2 import Template
 
 # Import for declaring agent
-from geo_assistant.agent._base import BaseAgent, tool, tool_type, system_message
+from geo_assistant.agent._base import BaseAgent, tool, tool_type, system_message, postchat
+from geo_assistant.agent.updates import EmitUpdate, Status
 
 # Import geo assisant stuff
 from geo_assistant.config import Configuration
+from geo_assistant.logging import get_logger
 from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
 from geo_assistant.table_registry import TableRegistry
 from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant.handlers._filter import HandlerFilter
 
+# Analysis imports
+from geo_assistant.agent.analysis import _GISAnalysis
+from geo_assistant.agent.analysis.report import TableCreated, PlotlyMapLayerArguements
+
+logger = get_logger(__name__)
 
 GEO_AGENT_SYSTEM_MESSAGE = """
 You are a geo-assistant who is an expert at making maps in GIS software. You will be given access
@@ -32,6 +42,23 @@ Here is any other relevant information:
 Here are the tables that are available:
 {tables}
 """
+
+
+class FigureUpdate(EmitUpdate):
+    """
+    New update that sends over an updated plotly json
+    """
+    type: Literal['figure_update'] = 'figure_update'
+    figure: str
+
+
+
+class AnalysisUpdate(EmitUpdate):
+    type: Literal['analysis'] = 'analysis'
+    id: str
+    query: str
+    step: str
+    progress: float
 
 
 class GeoAgent(BaseAgent):
@@ -75,8 +102,14 @@ class GeoAgent(BaseAgent):
             tables=list(self.registry.tables.keys())
         )
 
-    def _finalize_response(self, text: str) -> str:
-        return text.strip()
+    async def _emit_figure(self, fig: str):
+        if self.emitter:
+            await self.emitter(
+                FigureUpdate(
+                    status=Status.SUCCEDED,
+                    figure=json.dumps(fig)
+                )
+            )
 
     @tool_type(
         name="filter",
@@ -120,7 +153,7 @@ class GeoAgent(BaseAgent):
         },
         required=["table","layer_id", "color"],
     )
-    def add_map_layer(self, table: str, color: str, layer_id: str, style: str = 'line', filters: list[dict]=None) -> str:
+    async def add_map_layer(self, table: str, color: str, layer_id: str, style: str = 'line', filters: list[dict]=None) -> str:
         if filters:
             filters = [
                 HandlerFilter(**filter_)
@@ -134,6 +167,8 @@ class GeoAgent(BaseAgent):
             color=color, 
             layer_id=layer_id
         )
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
         count = self.data_handler.filter_count(self.engine, table, filters)
         return f"Layer {layer_id} add with {count} rows"
 
@@ -143,16 +178,175 @@ class GeoAgent(BaseAgent):
         params={"layer_id":{"type":"string", "enum": lambda self: list(self.map_handler.map_layers.keys())}},
         required=["layer_id"],
     )
-    def remove_map_layer(self, layer_id: str) -> bool:
+    async def remove_map_layer(self, layer_id: str) -> bool:
         self.map_handler._remove_map_layer(layer_id)
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
         return f"Layer {layer_id} removed from map"
 
     @tool(
+        name="reset_map",
+        description="Resets the map, removing all layers",
+    )
+    async def reset_map(self):
+        self.map_handler._reset_map()
+        # Emit the udpated figure
+        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
+        return "Map resetedß"
+
+    @tool(
         name="run_analysis",
-        description="Perform spatial analysis on the current selection",
-        params={"prompt":{"type":"string"}},
+        description="Perform GIS Analysis, using differnt queries",
+        params={"query":{"type":"string"}},
         required=["prompt"],
     )
-    async def run_analysis(self, prompt: str) -> str:
-        # Hand off to specialized analysis logic or agent
-        return await super().run_analysis(prompt)
+    async def run_analysis(self, query: str):
+            """
+            Runs an analysis given a user message. This is a more time consuming process than 'chat',
+            as it forces the agent to *think* and plan steps, then executes sql to create tables for
+            the analysis
+
+            Args:
+                - query(str): Text descibing what the analysis should accomplish
+            """
+            analysis_id = str(abs(hash(query)))
+            if self.emitter:
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        query=query,
+                        step="Generating analysis plan...",
+                        status=Status.GENERATING,
+                        progress=1
+                    )
+                )
+
+                
+            logger.info(f"Running analysis for query: {query}")
+            # Setup the system message template
+            system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
+            # Query for relevant fields
+            field_defs = await self.field_store.query(query, k=15)
+            field_defs = self.registry.verify_fields(field_defs)
+            field_names = [field['name'] for field in field_defs]
+            # Query registry for all tables that make up the set of fields
+            tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
+            logger.debug(f"Tables: {tables}")
+            # Create a new Analysis Model with those fields as Enums (This forces the model to only
+            #   use valid fields)
+            DynGISModel = _GISAnalysis.build_model(
+                fields=field_names,
+                tables=[table.name for table in tables]
+            )
+            # Query for relative info
+            context = await self.info_store.query(query, k=10)
+            # Generate the system message
+            system_message = system_message_template.render(
+                field_definitions=field_defs,
+                context_info=context,
+                tables=tables
+            )
+            logger.debug(system_message)
+            
+            try:
+                # Hit openai to generate a step-by-step plan for the analysis
+                res: ParsedResponse[_GISAnalysis] = await self.client.responses.parse(
+                    input=[
+                        {'role': 'system', 'content': system_message},
+                        {'role': 'user', 'content': query}
+                    ],
+                    model="o4-mini",
+                    reasoning={
+                        "effort":"high",
+                    },
+                    text_format=DynGISModel
+                )
+                analysis = res.output_parsed
+            except Exception as e:
+                if self.emitter:
+                    await self.emitter(
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            step="Analysis plan failed to generate.",
+                            status=Status.ERROR,
+                            progress=1.0
+                        )
+                    )
+                    
+                raise e
+            logger.info(analysis.model_dump_json(indent=2))
+            # Run through the steps, executing each query
+            logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
+
+            try:
+                async def _step_emitter(update_dict: dict):
+                    await self.emitter(
+                        AnalysisUpdate.model_validate(update_dict)
+                    )
+
+                # Execute and gather the report
+                report = await analysis.execute(
+                    id_=analysis_id, 
+                    engine=self.engine, 
+                    emitter=_step_emitter,
+                    query=query
+                )
+                # Perform any actions required based on the report
+                for item in report.items:
+                    if isinstance(item, TableCreated):
+                        table = self.registry.register(
+                            id_=f"{analysis.name}.{item.table_created}",
+                            engine=self.engine
+                        )
+                        table._postprocess(self.engine)
+                    elif isinstance(item, PlotlyMapLayerArguements):
+                        logger.info(item)
+                        schema, table = item.source_table.split('.')
+                        table = self.registry[
+                            ('schema', schema),
+                            ('table', table)
+                        ][0]
+                        self.map_handler._add_map_layer(
+                            table=table,
+                            layer_id=item.layer_id,
+                            color=item.color
+                        )
+                    else:
+                        logger.warning(
+                            f"Report item type {type(item)} handler not implemented"
+                        )
+                report_succeded = True
+            except Exception as e:
+                logger.exception(e)
+                report_succeded = False
+            finally:
+                # No matter what, drop all the tables but the last possible
+                logger.debug(analysis.tables_created)
+                logger.debug(analysis.final_tables)
+                self.registry.sync_tileserv(self.engine)
+                for table_name in analysis.tables_created:
+                    if table_name not in analysis.final_tables:
+                        logger.info(f"Dropping {table_name}...")
+                        schema, table = table_name.split('.')
+                        self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
+            if self.emitter:
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        query=query,
+                        step="Complete",
+                        status=Status.SUCCEDED,
+                        progress=1.0
+                    )
+                )
+
+            if report_succeded:
+                return (
+                    f"GIS Analysis ran succussfully."
+                    f"Report description:"
+                    f"{report.model_dump_json(indent=2)}"
+                )
+            else:
+                return (
+                    f"GIS Analysis failed."
+                )

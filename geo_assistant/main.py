@@ -1,4 +1,8 @@
 # main.py
+from dotenv import load_dotenv
+load_dotenv()
+
+
 import json
 import uvicorn
 from sqlalchemy import create_engine
@@ -10,6 +14,7 @@ from geo_assistant import GeoAgent
 from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
+from geo_assistant.agent.updates import EmitUpdate
 
 logger = get_logger(__name__)
 
@@ -42,7 +47,13 @@ agent = GeoAgent(
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
-    agent._set_websocket(ws)
+
+    async def _websocket_emit(udpate: EmitUpdate):
+        await ws.send_text(
+            udpate.model_dump_json()
+        )
+
+    agent.emitter = _websocket_emit
     try:
         while True:
             raw = await ws.receive_text()

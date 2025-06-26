@@ -20,11 +20,3 @@ class AiUpdate(EmitUpdate):
     message: str = None
     tool_call: str = None
     tool_args: dict = None
-
-
-class AnalysisUpdate(EmitUpdate):
-    type: Literal['analysis'] = 'analysis'
-    id: str
-    query: str
-    step: str
-    progress: float

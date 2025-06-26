@@ -68,6 +68,7 @@ class PostGISHandler:
     def filter_count(
         self,
         engine: Engine,
+        table: Table,
         filters: list[HandlerFilter] = None,
     ) -> int:
         """
@@ -81,7 +82,6 @@ class PostGISHandler:
         Returns:
             int: The number of rows that meet the criterial of the filter
         """
-        table = self.active_tables[0]
         total_count = 0
         if filters:
             where_clause = " AND ".join(f._to_sql() for f in filters)
