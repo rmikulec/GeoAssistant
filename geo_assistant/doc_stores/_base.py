@@ -108,7 +108,7 @@ class DocumentStore(ABC):
                 {'role': 'user', 'content': json.dumps({'conversation': conversation, 'query': text}, indent=2)}
             ],
             text_format=SearchQuery,
-            model="gpt-4o"
+            model="o4-mini"
         )
 
         terms = res.output_parsed.terms

@@ -40,6 +40,14 @@ Here is any other relevant information:
 {supplement_information}
 """
 
+ANALYSIS_PERFORMANCE_GUIDELINES = """
+- Break queries into short, sequential steps using temporary tables
+- Filter early using indexed columns or bounding boxes
+- Select only the columns required for the next step
+- Avoid expensive spatial joins when a bounding box will do
+- Drop intermediate tables once they are no longer needed
+"""
+
 
 class GeoAgent:
     """
@@ -264,7 +272,10 @@ class GeoAgent:
         system_message = system_message_template.render(
             field_definitions=fields,
             context_info=context,
-            tables=tables
+            tables=tables,
+            performance_guidelines=ANALYSIS_PERFORMANCE_GUIDELINES,
+            analysis_goal=query,
+            map_status=json.dumps(self.map_handler.status, indent=2)
         )
         print(system_message)
         

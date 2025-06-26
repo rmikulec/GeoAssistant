@@ -5,7 +5,7 @@ class DefaultConfiguration(BaseSettings):
     # OpenAI Configuration
     openai_key: str = Field(default="no-key")
     parsing_model: str = Field(default="o4-mini")
-    inference_model: str = Field(default="gpt-4o")
+    inference_model: str = Field(default="o4-mini")
     embedding_model: str = Field(default="text-embedding-3-small")
     embedding_dims: int = Field(default=1536)
 
