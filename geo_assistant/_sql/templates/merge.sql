@@ -9,8 +9,8 @@ SELECT
 {%- for col in right_select %}
   r."{{ col.value }}",
 {%- endfor %}
-  ST_SetSRID(
-    ST_Transform(l."{{ geometry_column }}", {{ srid }}),
+  ST_Transform(
+    l."{{ geometry_column }}",
     {{ srid }}
   )::Geometry({{ output_geometry_type }}, {{ srid }}) AS "{{ geometry_column }}"
 FROM "{{ left_table.source_schema }}"."{{ left_table.source_table }}" AS l

@@ -2,17 +2,19 @@
 DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
 CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
+WITH src AS (
+  SELECT
+    *,
+    ST_Transform("{{ geometry_column }}", {{ srid }}) AS geom_tr
+  FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
+)
 SELECT
   *,
-  ST_SetSRID(
-    ST_Buffer(
-      ST_Transform("{{ geometry_column }}", {{ srid }}),
-      {{ buffer_distance }} * (CASE WHEN '{{ buffer_unit }}' = 'kilometers' THEN 1000 ELSE 1 END)
-    ),
-    {{ srid }}
-  )::Geometry(MultiPolygon , {{ srid }})
-  AS geom_buf
-FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}";
+  ST_Buffer(
+    geom_tr,
+    {{ buffer_distance }} * (CASE WHEN '{{ buffer_unit }}' = 'kilometers' THEN 1000 ELSE 1 END)
+  )::Geometry(MultiPolygon, {{ srid }}) AS geom_buf
+FROM src;
 
 -- drop the old geometry so we only have one
 ALTER TABLE "{{ schema }}"."{{ output_table }}"

@@ -11,7 +11,7 @@ GRANT SELECT
   TO PUBLIC;
 
 -- 3) Create the GiST index (unqualified index name so we don’t re-qualify it by schema)
-CREATE INDEX IF NOT EXISTS
+CREATE INDEX CONCURRENTLY IF NOT EXISTS
   "{{ table }}_geometry_gist_idx"
   ON "{{ schema }}"."{{ table }}"
   USING GIST (geometry);

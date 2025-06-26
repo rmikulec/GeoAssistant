@@ -19,7 +19,7 @@ SELECT
     {%- if spatial_aggregator -%}
       ST_{{ spatial_aggregator }}("{{ geometry_column }}")
     {%- else -%}
-      ST_Union("{{ geometry_column }}")
+      ST_UnaryUnion("{{ geometry_column }}")
     {%- endif -%},
     {{ srid }}
   )::Geometry({{ gtype }}, {{ srid }})

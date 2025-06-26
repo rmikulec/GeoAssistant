@@ -6,10 +6,7 @@ SELECT
 {%- for col in select %}
   "{{ col.value }}",
 {%- endfor %}
-  ST_SetSRID(
-    ST_Transform("{{ geometry_column }}", {{ srid }}),
-    {{ srid }}
-  )::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
+  ST_Transform("{{ geometry_column }}", {{ srid }})::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
 FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 {% if filters %}
 WHERE
