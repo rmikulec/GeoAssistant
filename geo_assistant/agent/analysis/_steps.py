@@ -240,6 +240,8 @@ class _FilterStep(_SQLStep):
     Filter step that runs a basic `WHERE` clause
     """
     step_type: Literal['filter'] = "filter"
+    limit: int
+    order_by: list[_Field]
     select: list[_Field]
     source_table: _SourceTable
     filters: list[_FilterItem]

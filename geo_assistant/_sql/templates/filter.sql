@@ -4,10 +4,13 @@ DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
 WITH src AS (
   SELECT
+    {% if select|length == 0 %}
+      *,
+    {% else %}
     {%- for col in select %}
-      "{{ col.value }}"{{ "," if not loop.last else "" }}
+      "{{ col.value }},"
     {%- endfor %}
-    {%- if select | length > 0 %},{% endif %}
+    {% endif %}
     ST_Transform(
       "{{ geometry_column }}",
       {{ srid }}
@@ -32,3 +35,12 @@ WHERE
     {{ "AND" if not loop.last else "" }}
   {%- endfor %}
 {%- endif %};
+{% if order_by %}
+ORDER BY
+  {% for o in order_by %}
+    {{ o.value }}{{"," if not loop.last else ""}}
+  {% endfor %}
+{% endif %}
+{% if limit %}
+LIMIT {{ limit }}
+{% endif %}
