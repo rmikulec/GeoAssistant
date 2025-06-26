@@ -8,13 +8,13 @@ WITH src AS (
       *,
     {% else %}
     {%- for col in select %}
-      "{{ col.value }},"
+      "{{ col.value }}",
     {%- endfor %}
     {% endif %}
     ST_Transform(
       "{{ geometry_column }}",
       {{ srid }}
-    )::Geometry({{ gtype }}, {{ srid }}) AS "{{ geometry_column }}"
+    )::Geometry({{ gtype }}, {{ srid }}) AS "geom{{srid}}"
   FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 )
 SELECT *
@@ -34,13 +34,22 @@ WHERE
     {%- endif -%}
     {{ "AND" if not loop.last else "" }}
   {%- endfor %}
-{%- endif %};
+{%- endif %}
 {% if order_by %}
-ORDER BY
+ORDER BY 
   {% for o in order_by %}
-    {{ o.value }}{{"," if not loop.last else ""}}
+    "{{ o.value }}"{{"," if not loop.last else ""}}
   {% endfor %}
+  {% if order_desc %}DESC{% endif %}
 {% endif %}
 {% if limit %}
 LIMIT {{ limit }}
 {% endif %}
+;
+-- drop the old geometry so we only have one
+ALTER TABLE "{{ schema }}"."{{ output_table }}"
+DROP COLUMN IF EXISTS "{{ geometry_column }}";
+
+-- rename the buffered column into place
+ALTER TABLE "{{ schema }}"."{{ output_table }}"
+RENAME COLUMN "geom{{srid}}" TO "{{ geometry_column }}";

@@ -242,6 +242,7 @@ class _FilterStep(_SQLStep):
     step_type: Literal['filter'] = "filter"
     limit: int
     order_by: list[_Field]
+    order_desc: bool
     select: list[_Field]
     source_table: _SourceTable
     filters: list[_FilterItem]
