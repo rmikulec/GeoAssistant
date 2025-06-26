@@ -1,7 +1,5 @@
 import geopandas as gpd
-from sqlalchemy import create_engine, text
-from typing import Optional, Union
-from collections import defaultdict
+from sqlalchemy import text
 
 from sqlalchemy import Engine
 
@@ -26,7 +24,7 @@ class PostGISHandler:
         engine: Engine,
         lat: float,
         lon: float,
-        line_tolerance: Optional[int] = 10
+        line_tolerance: int = 10
     ) -> gpd.GeoDataFrame:
         """
         Retrieves data from a table, that intersects with a given lat/long

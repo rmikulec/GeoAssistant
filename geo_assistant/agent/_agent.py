@@ -149,7 +149,7 @@ class GeoAgent(BaseAgent):
             "layer_id": {"type":"string"},
             "style":    {"type":"string"},
             "color":    {"type":"string", "description": "A hex value for the color of the layer"},
-            "filters":  {"type": "#filter"},
+            "filters":  {"type": "array", "items": {"type": "#filter"}},
         },
         required=["table","layer_id", "color"],
     )
@@ -198,7 +198,7 @@ class GeoAgent(BaseAgent):
         name="run_analysis",
         description="Perform GIS Analysis, using differnt queries",
         params={"query":{"type":"string", "description": "Description of what analysis should be done"}},
-        required=["prompt"],
+        required=["query"],
     )
     async def run_analysis(self, query: str):
             """
@@ -263,6 +263,7 @@ class GeoAgent(BaseAgent):
                 )
                 analysis = res.output_parsed
             except Exception as e:
+                # Capture any exceptions to emit an error then raise
                 if self.emitter:
                     await self.emitter(
                         AnalysisUpdate(
@@ -301,8 +302,6 @@ class GeoAgent(BaseAgent):
                         )
                         table._postprocess(self.engine)
                     elif isinstance(item, PlotlyMapLayerArguements):
-                        logger.info(item)
-                        print(item.source_table)
                         schema, table = item.source_table.split('.')
                         table = self.registry[
                             ('schema', schema),
@@ -321,8 +320,17 @@ class GeoAgent(BaseAgent):
                         )
                 report_succeded = True
             except Exception as e:
-                logger.exception(e)
-                report_succeded = False
+                if self.emitter:
+                    await self.emitter(
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            query=query,
+                            step="Analysis failed to run.",
+                            status=Status.ERROR,
+                            progress=1.0
+                        )
+                    )
+                raise e
             finally:
                 # No matter what, drop all the tables but the last possible
                 logger.debug(analysis.tables_created)
@@ -344,13 +352,8 @@ class GeoAgent(BaseAgent):
                     )
                 )
 
-            if report_succeded:
-                return (
-                    f"GIS Analysis ran succussfully."
-                    f"Report description:"
-                    f"{report.model_dump_json(indent=2)}"
-                )
-            else:
-                return (
-                    f"GIS Analysis failed."
-                )
+            return (
+                f"GIS Analysis ran succussfully."
+                f"Report description:"
+                f"{report.model_dump_json(indent=2)}"
+            )

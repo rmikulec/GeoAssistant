@@ -8,6 +8,7 @@ from plotly.graph_objects import Figure
 from geo_assistant.logging import get_logger
 from geo_assistant.table_registry import Table
 from geo_assistant.handlers._filter import HandlerFilter
+from geo_assistant.config import Configuration
 
 logger = get_logger(__name__)
 
@@ -32,7 +33,7 @@ class PlotlyMapHandler:
         self.figure = go.Figure(go.Choroplethmapbox())  # empty scatter to initialize mapbox
         self.figure.update_layout(
             mapbox=dict(
-                style="open-street-map",
+                style=Configuration.map_box_style,
                 center=dict(lat=0, lon=0),
                 zoom=1,
                 layers=[]
@@ -103,7 +104,7 @@ class PlotlyMapHandler:
         """
         # Prepare layout update
         mapbox_config = dict(
-            style="open-street-map",
+            style=Configuration.map_box_style,
             layers=list(self.map_layers.values())
         )
 
