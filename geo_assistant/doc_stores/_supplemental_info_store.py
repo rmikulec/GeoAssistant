@@ -89,10 +89,17 @@ class SupplementalInfoStore(DocumentStore):
                 text_format=SupplementalInfo
             )
             return resp.output_parsed
-
-        results = await asyncio.gather(*[_parse_data(page_batch) for page_batch in page_batches])
-        sections = [result.sections for result in results]
-        sections = sum(sections, [])
+        
+        if len(reader.pages) <= batch_size:
+            sections = (await _parse_data(reader.pages)).sections
+        else:
+            page_batches = [
+                pages[i : i + batch_size]
+                for i in range(0, len(pages), window_size)
+            ]
+            results = await asyncio.gather(*[_parse_data(page_batch) for page_batch in page_batches])
+            sections = [result.sections for result in results]
+            sections = sum(sections, [])
 
 
         docs: List[Dict[str, Any]] = [
