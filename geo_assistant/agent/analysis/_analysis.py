@@ -196,7 +196,7 @@ class _GISAnalysis(BaseModel):
                         "query": query,
                         "step": step.reasoning,
                         "id": id_,
-                        "status": "running",
+                        "status": "processing",
                         "progress": float(i+1)/len(self.steps)
                     }
                 )
