@@ -23,10 +23,10 @@ from sqlalchemy import Engine, text
 from geo_assistant.logging import get_logger
 
 from geo_assistant.config import Configuration
-from geo_assistant.agent._sql_exec import execute_template_sql
-from geo_assistant.agent.report import PlotlyMapLayerArguements, TableCreated, SaveTable
-from geo_assistant.agent._filter import SQLFilters, _FilterItem
-from geo_assistant.agent._aggregator import SQLAggregators, _Aggregator
+from geo_assistant._sql._sql_exec import execute_template_sql
+from geo_assistant.agent.analysis.report import PlotlyMapLayerArguements, TableCreated, SaveTable
+from geo_assistant.agent.analysis._filter import SQLFilters, _FilterItem
+from geo_assistant.agent.analysis._aggregator import SQLAggregators, _Aggregator
 
 logger = get_logger(__name__)
 

@@ -5,7 +5,7 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import ProgrammingError
 
 from geo_assistant.logging import get_logger
-from geo_assistant.agent._sql_exec import execute_template_sql
+from geo_assistant._sql._sql_exec import execute_template_sql
 from geo_assistant.config import Configuration
 
 logger = get_logger(__name__)
