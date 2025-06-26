@@ -57,6 +57,12 @@ def parse_args():
         action="store_true",
         help="Write the DataFrame index as a column in the table",
     )
+    p.add_argument(
+        "--skip-docstores",
+        "-s",
+        action="store_true",
+        help="Skips uploading to docstores if true",
+    )
     return p.parse_args()
 
 def main():
@@ -146,22 +152,23 @@ def main():
         sys.exit(1)
 
 
-    logger.info(f"Loading DocStores from {args.metadata}")
-    field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
-    info_store = SupplementalInfoStore(version=Configuration.info_store_version)
+    if not args.skip_docstores:
+        logger.info(f"Loading DocStores from {args.metadata}")
+        field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
+        info_store = SupplementalInfoStore(version=Configuration.info_store_version)
 
-    logger.info("loading into field store...")
-    asyncio.run(field_store.add_pdf(
-        pdf_path=args.metadata,
-        table=args.table
-    ))
+        logger.info("loading into field store...")
+        asyncio.run(field_store.add_pdf(
+            pdf_path=args.metadata,
+            table=args.table
+        ))
 
-    logger.info("Loading into info store...")
-    asyncio.run(info_store.add_pdf(
-        pdf_path=args.metadata,
-        table=args.table
-    ))
-    
+        logger.info("Loading into info store...")
+        asyncio.run(info_store.add_pdf(
+            pdf_path=args.metadata,
+            table=args.table
+        ))
+        
 
 if __name__ == "__main__":
     main()
