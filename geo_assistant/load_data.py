@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import asyncio
 import sys
 
 from geo_assistant.logging import get_logger
@@ -8,6 +9,7 @@ import geopandas as gpd
 from sqlalchemy import create_engine, text
 
 from geo_assistant.config import Configuration
+from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 
 logger = get_logger(__name__)
 
@@ -27,14 +29,15 @@ def parse_args():
         help="Destination table name in PostGIS (default: parcels)",
     )
     p.add_argument(
+        "--metadata",
+        "-m",
+        type=str,
+        help="The path the the metadata pdf with field definitions"
+    )
+    p.add_argument(
         "--src-crs",
         type=int,
         help="EPSG code of source CRS (if not set, uses whatever the Parquet declares)",
-    )
-    p.add_argument(
-        "--metadata",
-        type=str,
-        help="The path the the metadata pdf with field definitions"
     )
     p.add_argument(
         "--dest-crs",
@@ -141,6 +144,24 @@ def main():
     except Exception as e:
         logger.error(f"Error setting up table: {e}")
         sys.exit(1)
+
+
+    logger.info(f"Loading DocStores from {args.metadata}")
+    field_store = FieldDefinitionStore(version=Configuration.field_def_store_version)
+    info_store = SupplementalInfoStore(version=Configuration.info_store_version)
+
+    logger.info("loading into field store...")
+    asyncio.run(field_store.add_pdf(
+        pdf_path=args.metadata,
+        table=args.table
+    ))
+
+    logger.info("Loading into info store...")
+    asyncio.run(info_store.add_pdf(
+        pdf_path=args.metadata,
+        table=args.table
+    ))
+    
 
 if __name__ == "__main__":
     main()

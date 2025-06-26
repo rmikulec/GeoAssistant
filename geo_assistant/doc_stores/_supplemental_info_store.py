@@ -1,13 +1,17 @@
 import pathlib
 import asyncio
+import hashlib
 from typing import Union, Any, Dict, List
 from pydantic import BaseModel, Field
 
 from PyPDF2 import PdfReader, PageObject
 
+from geo_assistant.logging import get_logger
 from geo_assistant.config import Configuration
 from geo_assistant.doc_stores._base import DocumentStore
 
+
+logger = get_logger(__name__)
 
 PARSE_SYSTEM_MESSAGE = """
 You are an AI assistant specialized in extracting data from a pdf. You are tasked with extracting all
@@ -30,6 +34,12 @@ class SupplementalInfo(BaseModel):
     sections: list[MarkdownSection] = Field(description="Markdown sections, paragraphs, and tables of information")
 
 
+def hash_doc(idx: int, table: str, pdf_path: pathlib.Path) -> str:
+    s = table+str(pdf_path.name)+str(idx)
+    h = hashlib.sha256(s.encode('utf-8')).hexdigest()
+    return int(h, 16)
+
+
 class SupplementalInfoStore(DocumentStore):
     """
     A FAISS-backed store for “supplemental” PDF content (appendices, code tables, etc).
@@ -41,6 +51,7 @@ class SupplementalInfoStore(DocumentStore):
     async def add_pdf(
         self,
         pdf_path: Union[str, pathlib.Path],
+        table: str,
         start_page: int = None,
         end_page: int = None,
         batch_size: int = 2,
@@ -62,10 +73,12 @@ class SupplementalInfoStore(DocumentStore):
         else:
             pages= reader.pages
         
+
         page_batches = [
             pages[i : i + batch_size]
             for i in range(0, len(pages), window_size)
         ]
+
 
         async def _parse_data(page_batch: list[PageObject]):
             # Ask OpenAI to format into markdown
@@ -81,12 +94,13 @@ class SupplementalInfoStore(DocumentStore):
         sections = [result.sections for result in results]
         sections = sum(sections, [])
 
-        # Prepare a single “document” containing all supplemental info
+
         docs: List[Dict[str, Any]] = [
             {
-                "id":   len(self.documents) + idx,
+                "id":  hash(table+str(pdf_path.name)+str(idx)),
                 "text": f"{section.title}: {section.markdown}",
                 "source": str(pdf_path.name),
+                "table": table,
                 **section.model_dump()
             }
             for idx, section in enumerate(sections)
