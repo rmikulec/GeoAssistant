@@ -96,6 +96,14 @@ class PlotlyMapHandler:
         self.map_layers.clear()
         self._layer_filters.clear()
         self._active_table = None
+        self.figure.update_layout(
+            mapbox=dict(
+                style=Configuration.map_box_style,
+                center=dict(lat=0, lon=0),
+                zoom=1,
+                layers=[]
+            )
+        )
         logger.debug("Map reset to initial state")
 
     def update_figure(self) -> Figure:
@@ -103,14 +111,20 @@ class PlotlyMapHandler:
         Applies current layers and bounds to the figure and returns it.
         """
         # Prepare layout update
+        # Force a full copy of layers
+        layers = [dict(layer) for layer in self.map_layers.values()]
+
         mapbox_config = dict(
             style=Configuration.map_box_style,
-            layers=list(self.map_layers.values())
+            layers=layers
         )
 
         bounds = self._global_bounds
         if bounds:
-            center = {"lon": (bounds["west"] + bounds["east"])/2, "lat": (bounds["south"] + bounds["north"])/2}
+            center = {
+                "lon": (bounds["west"] + bounds["east"]) / 2,
+                "lat": (bounds["south"] + bounds["north"]) / 2
+            }
             span = max(bounds["east"] - bounds["west"], bounds["north"] - bounds["south"])
             zoom = -math.log2(span / 360)
             mapbox_config.update(center=center, zoom=zoom)

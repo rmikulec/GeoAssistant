@@ -93,13 +93,13 @@ class GeoAgent(BaseAgent):
     @system_message
     async def _system_message(self, user_message: str):
         # load context and inject as system prompt
-        self.registry = TableRegistry.load_from_tileserv(self.engine)
+        tables = self.registry[('schema', 'base')]
         context = await self.info_store.query(user_message, k=3)
         context = "\n\n".join(r['markdown'] for r in context)
         return GEO_AGENT_SYSTEM_MESSAGE.format(
             map_status=self.map_handler.status,
             context=context,
-            tables=list(self.registry.tables.keys())
+            tables=[table.name for table in tables]
         )
 
     async def _emit_figure(self, fig: str):
@@ -145,7 +145,7 @@ class GeoAgent(BaseAgent):
         name="add_map_layer",
         description="Add a layer to the map with optional CQL filters",
         params={
-            "table":    {"type":"string", "enum": lambda self: [t.name for t in self.registry.tables.values()]},
+            "table":    {"type":"string", "enum": lambda self: [t.name for t in self.registry[('schema', 'base')]]},
             "layer_id": {"type":"string"},
             "style":    {"type":"string"},
             "color":    {"type":"string", "description": "A hex value for the color of the layer"},
@@ -192,7 +192,7 @@ class GeoAgent(BaseAgent):
         self.map_handler._reset_map()
         # Emit the udpated figure
         await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
-        return "Map resetedß"
+        return "Map reseted"
 
     @tool(
         name="run_analysis",

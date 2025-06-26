@@ -10,6 +10,7 @@ from geo_assistant.agent.updates import AiUpdate, Status, EmitUpdate, ToolUpdate
 
 logger = get_logger(__name__)
 
+
 class SystemMessageNotDeclared(Exception):
     def __init__(self):
         super().__init__("System message not declared on agent. One function must use `@system_message`")
@@ -286,7 +287,7 @@ class BaseAgent:
                 result = await _safe_run(handler, **kwargs)
             except Exception as e:
                 logger.exception(e)
-                result = f"Tool `{tool_call.name}` failed: {e}"
+                result = f"Tool `{tool_call.name}` failed: {e}. Please kindly state to the user that is failed, provide context, and ask if they want to try again."
                 if self.emitter:
                     await _safe_run(
                         self.emitter,

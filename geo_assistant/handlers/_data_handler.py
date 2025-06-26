@@ -83,7 +83,7 @@ class PostGISHandler:
         total_count = 0
         if filters:
             where_clause = " AND ".join(f._to_sql() for f in filters)
-            sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name} WHERE {where_clause};"
+            sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name} AS {table.name} WHERE {where_clause};"
         else:
             sql = f"SELECT COUNT(*) FROM {table.schema}.{table.name}"
         with engine.connect() as conn:
