@@ -115,12 +115,12 @@ class GeoAgent(BaseAgent):
             "table":    {"type":"string", "enum": lambda self: [t.name for t in self.registry.tables.values()]},
             "layer_id": {"type":"string"},
             "style":    {"type":"string"},
-            "color":    {"type":"string"},
+            "color":    {"type":"string", "description": "A hex value for the color of the layer"},
             "filters":  {"type": "#filter"},
         },
-        required=["table","layer_id"],
+        required=["table","layer_id", "color"],
     )
-    def add_map_layer(self, table: str, style: str, color: str, layer_id: str, filters: list[dict]=None) -> int:
+    def add_map_layer(self, table: str, color: str, layer_id: str, style: str = 'line', filters: list[dict]=None) -> str:
         if filters:
             filters = [
                 HandlerFilter(**filter_)
@@ -134,7 +134,8 @@ class GeoAgent(BaseAgent):
             color=color, 
             layer_id=layer_id
         )
-        return self.data_handler.filter_count(self.engine, filters)
+        count = self.data_handler.filter_count(self.engine, table, filters)
+        return f"Layer {layer_id} add with {count} rows"
 
     @tool(
         name="remove_map_layer",
@@ -143,7 +144,8 @@ class GeoAgent(BaseAgent):
         required=["layer_id"],
     )
     def remove_map_layer(self, layer_id: str) -> bool:
-        return self.map_handler.remove_layer(layer_id)
+        self.map_handler._remove_map_layer(layer_id)
+        return f"Layer {layer_id} removed from map"
 
     @tool(
         name="run_analysis",
