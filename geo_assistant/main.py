@@ -1,14 +1,13 @@
 # main.py
 import json
 import uvicorn
+from sqlalchemy import create_engine
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.responses import JSONResponse
-from starlette.middleware.wsgi import WSGIMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from geo_assistant.dash_app import create_dash_app
-from geo_assistant.agent._agent import GeoAgent
+
+from geo_assistant import GeoAgent
 from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler
-from sqlalchemy import create_engine
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
 
@@ -90,7 +89,7 @@ def query_lat_long(
         )
     except Exception as e:
         # wrap any errors in an HTTPException so FastAPI can return a proper 4xx/5xx
-        raise e
+        raise HTTPException(status_code=404, detail=e)
 
 # 5) Run it all together
 if __name__ == "__main__":

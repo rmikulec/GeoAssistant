@@ -16,16 +16,14 @@ from typing import Callable, Any
 from jinja2 import Template
 from sqlalchemy import Engine
 
-from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler, HandlerFilter
-from geo_assistant.agent.report import TableCreated, PlotlyMapLayerArguements
-from geo_assistant.table_registry import TableRegistry
-from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant import tools
+from geo_assistant.table_registry import TableRegistry
+from geo_assistant.handlers import PlotlyMapHandler, PostGISHandler, HandlerFilter
+from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant.config import Configuration
 
 from geo_assistant.agent.analysis import _GISAnalysis
-from geo_assistant.agent._steps import _AggregateStep, _FilterStep, _MergeStep, _BufferStep, _PlotlyMapLayerStep
-
+from geo_assistant.agent.analysis.report import TableCreated, PlotlyMapLayerArguements
 
 logger = get_logger(__name__)
 
@@ -272,7 +270,7 @@ class GeoAgent:
                     kwargs['table'] = table
                     self.tools['add_map_layer'](**kwargs)
                     # This tool has a custom response to handle how many parcels were selected
-                    tool_response = f"{self.data_handler.filter_count(self.engine, f"{table.schema}.{table.name}", filters)} parcels found"
+                    tool_response = f"{self.data_handler.filter_count(self.engine, filters)} parcels found"
                 except Exception as e:
                     logger.exception(e)
                     tool_response = f"Tool call: {tool_call.name} failed, raised: {str(e)}"
@@ -440,7 +438,8 @@ class GeoAgent:
                         f"Report item type {type(item)} handler not implemented"
                     )
             report_succeded = True
-        except:
+        except Exception as e:
+            logger.exception(e)
             report_succeded = False
         finally:
             # No matter what, drop all the tables but the last possible
@@ -451,7 +450,7 @@ class GeoAgent:
                 if table_name not in analysis.final_tables:
                     logger.info(f"Dropping {table_name}...")
                     schema, table = table_name.split('.')
-                    self.registry[('schema', schema), ('table', table)]._drop(self.engine)
+                    self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
         if self.socket_emit:
             await self.socket_emit(
                 {

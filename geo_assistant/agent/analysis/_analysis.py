@@ -6,9 +6,9 @@ from sqlalchemy import Engine, text
 
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
-from geo_assistant.agent.report import GISReport
-from geo_assistant.agent._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _PlotlyMapLayerStep
-from geo_assistant.agent._exceptions import AnalysisSQLStepFailed
+from geo_assistant.agent.analysis.report import GISReport
+from geo_assistant.agent.analysis._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _PlotlyMapLayerStep
+from geo_assistant.agent.analysis._exceptions import AnalysisSQLStepFailed
 
 
 logger = get_logger(__name__)
