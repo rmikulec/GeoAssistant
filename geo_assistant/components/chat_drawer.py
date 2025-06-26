@@ -203,15 +203,7 @@ class ChatDrawer(dbc.Offcanvas):
                             id={"type":"user-msg","id":uid}
                         )
                     )
-                else:
-                    # fallback
-                    children.append(
-                        html.Div(
-                            p.get("message",""),
-                            className="chat-message",
-                            id={"type":"other-msg","id":uid}
-                        )
-                    )
+
             return children
 
 

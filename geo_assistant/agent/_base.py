@@ -6,7 +6,7 @@ from typing import Callable, Any
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
 
-from geo_assistant.agent.updates import AiUpdate, Status
+from geo_assistant.agent.updates import AiUpdate, Status, EmitUpdate, ToolUpdate
 
 logger = get_logger(__name__)
 
@@ -234,9 +234,8 @@ class BaseAgent:
         if self.emitter:
             await _safe_run(
                 self.emitter,
-                AiUpdate(
+                EmitUpdate(
                     status=Status.GENERATING,
-                    message="Generating response..."
                 )
             )
         try:
@@ -251,9 +250,8 @@ class BaseAgent:
             if self.emitter:
                 await _safe_run(
                     self.emitter,
-                    AiUpdate(
+                    EmitUpdate(
                         status=Status.ERROR,
-                        message="Generation failed"
                     )
                 )
             self.messages.append(
@@ -279,7 +277,7 @@ class BaseAgent:
                 if self.emitter:
                     await _safe_run(
                     self.emitter,
-                        AiUpdate(
+                        ToolUpdate(
                                 status=Status.PROCESSING,
                                 tool_call=tool_call.name,
                                 tool_args=kwargs
@@ -292,7 +290,7 @@ class BaseAgent:
                 if self.emitter:
                     await _safe_run(
                         self.emitter,
-                        AiUpdate(
+                        ToolUpdate(
                                 status=Status.ERROR,
                                 tool_call=tool_call.name,
                                 tool_args=kwargs
@@ -318,7 +316,7 @@ class BaseAgent:
                 if self.emitter:
                     await _safe_run(
                         self.emitter,
-                        AiUpdate(
+                        EmitUpdate(
                             status=Status.ERROR,
                             message="Generation failed"
                         )

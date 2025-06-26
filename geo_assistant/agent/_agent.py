@@ -197,7 +197,7 @@ class GeoAgent(BaseAgent):
     @tool(
         name="run_analysis",
         description="Perform GIS Analysis, using differnt queries",
-        params={"query":{"type":"string"}},
+        params={"query":{"type":"string", "description": "Description of what analysis should be done"}},
         required=["prompt"],
     )
     async def run_analysis(self, query: str):
@@ -268,6 +268,7 @@ class GeoAgent(BaseAgent):
                         AnalysisUpdate(
                             id=analysis_id,
                             step="Analysis plan failed to generate.",
+                            query=query,
                             status=Status.ERROR,
                             progress=1.0
                         )
@@ -301,16 +302,19 @@ class GeoAgent(BaseAgent):
                         table._postprocess(self.engine)
                     elif isinstance(item, PlotlyMapLayerArguements):
                         logger.info(item)
+                        print(item.source_table)
                         schema, table = item.source_table.split('.')
                         table = self.registry[
                             ('schema', schema),
                             ('table', table)
                         ][0]
                         self.map_handler._add_map_layer(
-                            table=table,
-                            layer_id=item.layer_id,
-                            color=item.color
+                            table=table, 
+                            color=item.color, 
+                            layer_id=item.layer_id
                         )
+                        # Emit the udpated figure
+                        await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
                     else:
                         logger.warning(
                             f"Report item type {type(item)} handler not implemented"

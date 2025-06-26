@@ -18,5 +18,9 @@ class EmitUpdate(BaseModel):
 class AiUpdate(EmitUpdate):
     type: Literal['ai_response'] = 'ai_response'
     message: str = None
+
+
+class ToolUpdate(EmitUpdate):
+    type: Literal['tool_update'] = 'tool_update'
     tool_call: str = None
     tool_args: dict = None

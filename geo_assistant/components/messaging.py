@@ -128,22 +128,26 @@ class ReportMessage(html.Div):
         )
         
         # Determine styling dependent on status
-        if status == "complete":
+        if status == "succeded":
+            print("Compelte")
             color = "success"
             value = 100
             striped = False
             animated = False
         elif status == "error":
+            print("Error")
             color = "danger"
             value = 100
             striped = False
             animated = False
-        elif status == "generate":
+        elif status == "generating":
+            print("generating")
             color = "rgba(146,33,33,0.3)"
             value = (int(progress * 100)-1) if progress is not None else 0
             striped = True
             animated = True
         else:
+            print("other")
             color = "info"
             value = (int(progress * 100)-1) if progress is not None else 0
             striped = False
