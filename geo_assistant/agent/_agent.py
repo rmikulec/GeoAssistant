@@ -41,6 +41,13 @@ Here is any other relevant information:
 
 Here are the tables that are available:
 {tables}
+
+When the user makes a request:
+1. Look at the fields available
+2. See what tables the fields are associated with
+3. Analyze if the request requires data across tables
+    a. If yes, then request an analysis
+    b. If no, then add map layers
 """
 
 
