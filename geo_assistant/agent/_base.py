@@ -167,6 +167,9 @@ class BaseAgent:
                         ref = item["type"][1:]
                         used_defs.add(ref)
                         s["items"] = {"$ref": f"#/definitions/{ref}"}
+                    elif item.get('type') == "string":
+                        if callable(item.get("enum")):
+                            s['items']["enum"] = item["enum"](self)
                 props[pname] = s
 
             parameters = {
@@ -230,6 +233,7 @@ class BaseAgent:
 
         # Create the tool list
         tool_defs = await self._build_tool_defs(user_message)
+        print(tool_defs)
 
         # Begin the first pass on generating a response from openai
         if self.emitter:
