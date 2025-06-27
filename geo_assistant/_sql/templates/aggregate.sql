@@ -47,11 +47,3 @@ GROUP BY
   {% for col in group_by %}
     "{{ col.value }}"{% if not loop.last %},{% endif %}
   {% endfor %};
-
--- Drop the original geometry column
-ALTER TABLE "{{ schema }}"."{{ output_table }}"
-DROP COLUMN IF EXISTS "{{ geometry_column }}";
-
--- Rename the aggregated geometry column
-ALTER TABLE "{{ schema }}"."{{ output_table }}"
-RENAME COLUMN "geom{{ srid }}" TO "{{ geometry_column }}";
