@@ -192,11 +192,12 @@ class GISAnalyst:
 
         # Create the new schema (if it doesnt exists already) and grant pg-tileserv permissions to
         #   use it
+        schema = self.current_plan['name']
         with engine.begin() as conn:
             sql = text(
                 (
-                    f"CREATE SCHEMA IF NOT EXISTS {self.plan['name']} AUTHORIZATION {Configuration.db_tileserv_role};"
-                    f"GRANT USAGE ON SCHEMA {self.plan['name']} TO {Configuration.db_tileserv_role};"
+                    f"CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION {Configuration.db_tileserv_role};"
+                    f"GRANT USAGE ON SCHEMA {schema} TO {Configuration.db_tileserv_role};"
                 )
             )
             conn.execute(sql)
@@ -207,7 +208,7 @@ class GISAnalyst:
             logger.info(f"Executing {step.name}")
             if issubclass(step, _SQLStep):
                 try:
-                    item = step._execute(engine, self.name)
+                    item = step._execute(engine, schema)
                     if step.to_destroy_:
                         self.to_destroy_.append(item)
                     yield item
