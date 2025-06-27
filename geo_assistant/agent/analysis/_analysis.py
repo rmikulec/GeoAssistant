@@ -7,7 +7,7 @@ from sqlalchemy import Engine, text
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
 from geo_assistant.agent.analysis.report import GISReport
-from geo_assistant.agent.analysis._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _PlotlyMapLayerStep
+from geo_assistant.agent.analysis._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _SelectColumn, _PlotlyMapLayerStep
 from geo_assistant.agent.analysis._exceptions import AnalysisSQLStepFailed
 
 
@@ -124,6 +124,23 @@ class _GISAnalysis(BaseModel):
             for step in self.steps
             if issubclass(step.__class__, _ReportingStep)
         ]
+    
+    @model_validator(mode="after")
+    def _process_select_columns(self):
+        for step in self.steps:
+            for field, info in step.__class__.model_fields.items():
+                ann = info.annotation
+                if isinstance(ann, type) and issubclass(ann, _SelectColumn):
+                    value: _SelectColumn = getattr(step, field)
+                    match value.left_or_right:
+                        case "left":
+                            new_value=f"l_{value.name}"
+                        case "right":
+                            new_value=f"r_{value.name}"
+                        case _:
+                            new_value=value.name
+                    setattr(step, field, new_value)
+        return self
 
     @model_validator(mode="after")
     def _fill_in_source_tables(self):
