@@ -205,8 +205,7 @@ class GISAnalyst:
         while self.generated_steps:
             step = self.generated_steps.pop(0)
         # Run each step, saving result to the 'items' array
-            logger.info(f"Executing {step.name}")
-            if issubclass(step, _SQLStep):
+            if issubclass(step.__class__, _SQLStep):
                 try:
                     item = step._execute(engine, schema)
                     if step.to_destroy_:
@@ -220,7 +219,7 @@ class GISAnalyst:
                     )
             # TODO: If any more reporting steps get added, new logic will need to be implemented
             #   here
-            elif issubclass(step, _ReportingStep):
+            elif issubclass(step.__class__, _ReportingStep):
                 yield step.export()
         
 

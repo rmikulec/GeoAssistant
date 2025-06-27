@@ -294,7 +294,7 @@ class GeoAgent(BaseAgent):
                             status=Status.ERROR,
                             query=emitted_text+"\n An error occured when planning out steps.",
                             step=step_plan.method,
-                            progress=complete_count/total_steps
+                            progress=1
                         )
                     )  
                 raise e              
@@ -352,24 +352,24 @@ class GeoAgent(BaseAgent):
                             status=Status.ERROR,
                             query=emitted_text+"\n An error occured when exectuing the SQL queries.",
                             step=step_plan.method,
-                            progress=complete_count/total_steps
+                            progress=1
                         )
                     )
                     raise e
             finally:
                 analyst.cleanup(self.engine)
 
-                if self.emitter:
-                    emitted_text+=step_plan.reason
-                    await self.emitter(
-                        AnalysisUpdate(
-                            id=analysis_id,
-                            status=Status.SUCCEDED,
-                            query=emitted_text,
-                            step="Complete.",
-                            progress=1
-                        )
+            if self.emitter:
+                emitted_text+=step_plan.reason
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        status=Status.SUCCEDED,
+                        query=emitted_text,
+                        step="Complete.",
+                        progress=1
                     )
+                )
 
             return (
                 f"GIS Analysis ran succussfully."
