@@ -1,10 +1,6 @@
 import json
-import pathlib
 from typing import Callable, Literal
 from sqlalchemy import Engine
-from openai.types.responses import ParsedResponse
-from jinja2 import Template
-
 # Import for declaring agent
 from geo_assistant.agent._base import BaseAgent, tool, tool_type, system_message, postchat
 from geo_assistant.agent.updates import EmitUpdate, Status
@@ -18,7 +14,7 @@ from geo_assistant.doc_stores import FieldDefinitionStore, SupplementalInfoStore
 from geo_assistant.handlers._filter import HandlerFilter
 
 # Analysis imports
-from geo_assistant.agent.analysis import _GISAnalysis
+from geo_assistant.agent.analysis import GISAnalyst
 from geo_assistant.agent.analysis.report import TableCreated, PlotlyMapLayerArguements
 
 logger = get_logger(__name__)
@@ -220,12 +216,13 @@ class GeoAgent(BaseAgent):
             Args:
                 - query(str): Text descibing what the analysis should accomplish
             """
+            emitted_text = f"### {goal}"
             analysis_id = str(abs(hash(goal)))
             if self.emitter:
                 await self.emitter(
                     AnalysisUpdate(
                         id=analysis_id,
-                        query=goal,
+                        query=emitted_text,
                         step="Generating analysis plan...",
                         status=Status.GENERATING,
                         progress=1
@@ -235,44 +232,15 @@ class GeoAgent(BaseAgent):
                 
             logger.info(f"Running analysis for query: {goal}")
             # Setup the system message template
-            system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
             # Query for relevant fields
             field_defs = await self.field_store.query(goal, k=15)
             field_defs = self.registry.verify_fields(field_defs)
             field_names = [field['name'] for field in field_defs]
             # Query registry for all tables that make up the set of fields
             tables = self.registry[('schema', Configuration.db_base_schema), ('fields', field_names)]
-            logger.debug(f"Tables: {tables}")
-            # Create a new Analysis Model with those fields as Enums (This forces the model to only
-            #   use valid fields)
-            DynGISModel = _GISAnalysis.build_model(
-                fields=field_names,
-                tables=[table.name for table in tables]
-            )
-            # Query for relative info
-            context = await self.info_store.query(goal, k=10)
-            # Generate the system message
-            system_message = system_message_template.render(
-                field_definitions=field_defs,
-                context_info=context,
-                tables=tables
-            )
-            logger.debug(system_message)
-            
+            analyst = GISAnalyst(tables)
             try:
-                # Hit openai to generate a step-by-step plan for the analysis
-                res: ParsedResponse[_GISAnalysis] = await self.client.responses.parse(
-                    input=[
-                        {'role': 'system', 'content': system_message},
-                        {'role': 'user', 'content': goal}
-                    ],
-                    model="o4-mini",
-                    reasoning={
-                        "effort":"high",
-                    },
-                    text_format=DynGISModel
-                )
-                analysis = res.output_parsed
+                await analyst.plan(goal)
             except Exception as e:
                 # Capture any exceptions to emit an error then raise
                 if self.emitter:
@@ -280,35 +248,80 @@ class GeoAgent(BaseAgent):
                         AnalysisUpdate(
                             id=analysis_id,
                             step="Analysis plan failed to generate.",
-                            query=goal,
+                            query=emitted_text,
                             status=Status.ERROR,
                             progress=1.0
                         )
                     )
                     
-                raise e
-            logger.info(analysis.model_dump_json(indent=2))
-            # Run through the steps, executing each query
-            logger.debug(f"Steps: {[step.name for step in analysis.steps]}")
+            # Walkthrough the plan, detailing the steps further. 
+            logger.debug(f"Steps: {[step.name for step in analyst.planning_queue]}")
+            if self.emitter:
+                await self.emitter(
+                    AnalysisUpdate(
+                        id=analysis_id,
+                        query=emitted_text,
+                        step="Generating plans further...",
+                        status=Status.PROCESSING,
+                        progress=0.0
+                    )
+                )
 
             try:
-                async def _step_emitter(update_dict: dict):
+                complete_count = 0
+                # This is twice as much as we now need to plan then execute
+                total_steps = 2*len(analyst.planning_queue)
+                async for step_plan in analyst.walkthrough():
+                    complete_count+=1
+                    logger.info(f"Generating {step_plan.name}")
+                    if self.emitter:
+                        emitted_text+=f"\n  - {step_plan.reason}"
+                        await self.emitter(
+                            AnalysisUpdate(
+                                id=analysis_id,
+                                status=Status.PROCESSING,
+                                query=emitted_text,
+                                step=step_plan.method,
+                                progress=complete_count/total_steps
+                            )
+                        )
+            except:
+                # Implement proper error handling
+                if self.emitter:
                     await self.emitter(
-                        AnalysisUpdate.model_validate(update_dict)
-                    )
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            status=Status.ERROR,
+                            query=emitted_text+"\n An error occured when planning out steps.",
+                            step=step_plan.method,
+                            progress=complete_count/total_steps
+                        )
+                    )                
 
-                # Execute and gather the report
-                report = await analysis.execute(
-                    id_=analysis_id, 
-                    engine=self.engine, 
-                    emitter=_step_emitter,
-                    query=goal
-                )
+
+            try:
                 # Perform any actions required based on the report
-                for item in report.items:
+                async for item in analyst.execute(self.engine):
+                    complete_count+=1
+                    logger.info(f"Execute {step_plan.name}")
+                    if self.emitter:
+                        emitted_text+=f"\n  - {item.reason}"
+                        await self.emitter(
+                            AnalysisUpdate(
+                                id=analysis_id,
+                                status=Status.PROCESSING,
+                                query=emitted_text,
+                                step=f"Creating table {item.table}...",
+                                progress=complete_count/total_steps
+                            )
+                        )
+
+                    # Here is the core logic for handling items from the analyst
+                    #   TODO: These items are actionable, may want cleaner code than
+                    #   a big if / else
                     if isinstance(item, TableCreated):
                         table = self.registry.register(
-                            id_=f"{analysis.name}.{item.table_created}",
+                            id_=f"{analyst.name}.{item.table_created}",
                             engine=self.engine
                         )
                         table._postprocess(self.engine)
@@ -329,39 +342,32 @@ class GeoAgent(BaseAgent):
                         logger.warning(
                             f"Report item type {type(item)} handler not implemented"
                         )
-                report_succeded = True
-            except Exception as e:
+            except:
                 if self.emitter:
+                    emitted_text+=step_plan.reason
                     await self.emitter(
                         AnalysisUpdate(
                             id=analysis_id,
-                            query=goal,
-                            step="Analysis failed to run.",
                             status=Status.ERROR,
-                            progress=1.0
+                            query=emitted_text+"\n An error occured when exectuing the SQL queries.",
+                            step=step_plan.method,
+                            progress=complete_count/total_steps
                         )
                     )
-                raise e
             finally:
-                # No matter what, drop all the tables but the last possible
-                logger.debug(analysis.tables_created)
-                logger.debug(analysis.final_tables)
-                self.registry.sync_tileserv(self.engine)
-                for table_name in analysis.tables_created:
-                    if table_name not in analysis.final_tables:
-                        logger.info(f"Dropping {table_name}...")
-                        schema, table = table_name.split('.')
-                        self.registry[('schema', schema), ('table', table)][0]._drop(self.engine)
-            if self.emitter:
-                await self.emitter(
-                    AnalysisUpdate(
-                        id=analysis_id,
-                        query=goal,
-                        step="Complete",
-                        status=Status.SUCCEDED,
-                        progress=1.0
+                analyst.cleanup(self.engine)
+
+                if self.emitter:
+                    emitted_text+=step_plan.reason
+                    await self.emitter(
+                        AnalysisUpdate(
+                            id=analysis_id,
+                            status=Status.SUCCEDED,
+                            query=emitted_text,
+                            step="Complete.",
+                            progress=1
+                        )
                     )
-                )
 
             return (
                 f"GIS Analysis ran succussfully."

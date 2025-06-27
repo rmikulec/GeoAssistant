@@ -115,7 +115,7 @@ class ReportMessage(html.Div):
         )
 
         # Updateable text
-        query_text = html.P(
+        query_text = dcc.Markdown(
             query,
             id=f"{id}-text" if id else None,
             className="mb-2",

@@ -7,12 +7,14 @@ This allows to creation of a json schema, complete with enums, for different typ
 
 from abc import ABC
 from typing import Literal, Optional, Union
-from pydantic import BaseModel, Field, ConfigDict, create_model
+from pydantic import Field, ConfigDict
+
+from geo_assistant.agent.analysis._select import _Column
 
 # all supported aggregation functions
 AggregatorOperator = Literal['COUNT', 'SUM', 'AVG', 'MIN', 'MAX']
 
-class _Aggregator(BaseModel, ABC):
+class _AggregateColumn(_Column):
     """
     Base Aggregator class, requiring an `operator` for each subclass, and providing an `alias`
         field for each subclass
@@ -28,16 +30,6 @@ class _Aggregator(BaseModel, ABC):
     # use operator as discriminator
     model_config = ConfigDict(discriminator='operator')
 
-    @classmethod
-    def _build_aggregator(cls, fields_enum):
-        """
-        Private method to inject Fields Enum into a `column` model field
-        """
-        return create_model(
-            cls.__name__.removeprefix('_'),
-            __base__=cls,
-            column=(fields_enum, ...)
-        )
 
 """
 Aggregator classes each for a different type of GROUP BY operation. To add more, extend the base
@@ -45,7 +37,7 @@ Aggregator classes each for a different type of GROUP BY operation. To add more,
 """
 
 
-class _CountAggregator(_Aggregator):
+class _Count(_AggregateColumn):
     operator: Literal['COUNT'] = "COUNT"
     column:   Union[str, Literal['*']]   = Field(
         '*',
@@ -57,31 +49,31 @@ class _CountAggregator(_Aggregator):
     )
 
 
-class _SumAggregator(_Aggregator):
+class _Sum(_AggregateColumn):
     operator: Literal['SUM'] = "SUM"
     column:   str                   = Field(..., description="Column to sum")
 
 
-class _AvgAggregator(_Aggregator):
+class _Avg(_AggregateColumn):
     operator: Literal['AVG'] = "AVG"
     column:   str                   = Field(..., description="Column to average")
 
 
-class _MinAggregator(_Aggregator):
+class _Min(_AggregateColumn):
     operator: Literal['MIN'] = "MIN"
     column:   str                   = Field(..., description="Column to take minimum of")
 
 
-class _MaxAggregator(_Aggregator):
+class _Max(_AggregateColumn):
     operator: Literal['MAX'] = "MAX"
     column:   str                   = Field(..., description="Column to take maximum of")
 
 
 # The union type you’ll actually use:
-SQLAggregators: list[_Aggregator] = [
-    _CountAggregator,
-    _SumAggregator,
-    _AvgAggregator,
-    _MinAggregator,
-    _MaxAggregator,
+SQLAggregators: list[_AggregateColumn] = [
+    _Count,
+    _Sum,
+    _Avg,
+    _Min,
+    _Max,
 ]

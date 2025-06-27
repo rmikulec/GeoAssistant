@@ -1,16 +1,22 @@
-from typing import Type, Union, Sequence, Self, Callable, Optional
+import pathlib
+import json
+from typing import Type, Sequence, Callable, Literal
 from enum import Enum
-from pydantic import BaseModel, Field, create_model, model_validator
-from pydantic.json_schema import SkipJsonSchema
+from openai import AsyncOpenAI
+from openai.types.responses import ParsedResponse
+from pydantic import BaseModel, Field, create_model
 from sqlalchemy import Engine, text
+from jinja2 import Template
 
 from geo_assistant.config import Configuration
 from geo_assistant.logging import get_logger
-from geo_assistant.agent.analysis.report import GISReport
-from geo_assistant.agent.analysis._steps import DEFAULT_STEP_TYPES, _GISAnalysisStep, _SQLStep, _ReportingStep, _SourceTable, _PlotlyMapLayerStep
+from geo_assistant.table_registry import Table
+from geo_assistant._sql._sql_exec import execute_template_sql
+from geo_assistant.agent.analysis.report import GISReport, TableCreated
+from geo_assistant.agent.analysis._steps import STEP_TYPES, _SQLStep, _ReportingStep
 from geo_assistant.agent.analysis._exceptions import AnalysisSQLStepFailed
 
-
+TEMPATE_PATH = pathlib.Path(__file__).resolve().parent / "templates"
 logger = get_logger(__name__)
 
 
@@ -32,135 +38,145 @@ def make_enum(name: str, *values: Sequence[str]) -> Type[Enum]:
     return Enum(name, members)
 
 
+class AnalysisPlanStep(BaseModel):
+    type: Literal["Merge", "Aggregate", "Filter", "Buffer", "Plot", "Save"]
+    name: str = Field(description="snake_case name of the step")
+    display_name: str = Field(description="Readable name of the step")
+    reason: str = Field(description="Why this step is being performed")
+    method: str = Field(description=
+        (
+            "A readable explanation on what the query/func should exactly do"
+            "This should not be code. Instead it should be instructions on how to code."
+        )
+    )
+    dependent_on: list[int] = Field(description="Indices of the previous steps this one is dependent on")
+    intermediate: bool = Field(description="Wheter this step is only used to get to the next, or is it part of the final output")
 
-class _GISAnalysis(BaseModel):
+
+class AnalysisPlan(BaseModel):
+    """
+    Schema used to prompt openai to build a plan for the analysis
+    """
+    name: str = Field(description="snake_case name of the plan")
+    display_name: str = Field(description="Readable name of the plan")
+    plan: str
+    steps: list[AnalysisPlanStep]
+
+
+
+class GISAnalyst:
     """
     Analysis base class, this is not intended to be directly used. Instead call
         `build_model` with the appropriate `step_types`, `fields` and `tables`
     """
 
-    name: str = Field(description="Snake case name of the analysis")
-    steps: list[_GISAnalysisStep]
-    #Private variables to not be exposed by pydantic, but used for running the analysis
-    final_tables: SkipJsonSchema[list[str]] = Field(default_factory=list)
-    tables_created: SkipJsonSchema[list[str]] = Field(default_factory=list)
+    def __init__(self, tables: list[Table]):
+        self.tables: list[Table] = tables
+        #Private variables to not be exposed by pydantic, but used for running the analysis
+        self.planning_queue: list[AnalysisPlanStep] = []
+        self.generated_steps: list[_SQLStep] = []
+        self.to_destroy_: list[TableCreated] = []
+        self.client = AsyncOpenAI(api_key=Configuration.openai_key)
 
-    @classmethod
-    def build_model(
-        cls, 
-        fields: list[str], 
-        tables: list[str],
-        step_types: list[Type[_GISAnalysisStep]] = DEFAULT_STEP_TYPES, 
-    ) -> Type[Self]:
-        """
-        Returns a new GISAnalysis subclass where each of the step models
-        (AggregateStep, MergeStep) has had:
-            - _DynamicField fields replaced with a `Fields` Enum
-            - _SourceTable fields replaced with a `Tables` Enum
+        self.current_plan = None
 
-        This class is intended to be built in order to be used for OpenAI Structured Outputs.
-        OpenAI will take in a user query, and attempt to build out an *Analysis* plan, that can
-        then be executed by calling `_GISAnalysis.execute`. The class is dynamically built in order
-        to ensure complete control over what fields and tables OpenAI can use to generate query
-        parameters
-        
-        Args:
-            fields (list[str]): List of fields to limit OpenAI to use
-            tables (list[str]): list of tables to limit OpenAI to use
-            step_types list[Type[_GISAnalysisStep]]: List of step types that will be used
-                for the final schema. Defaults to using all available.
-        
-        Returns:
-            Type[Self]: A new class type, that extends itself as a base class, adding the enum
-                restrictions in place of dynamic field descriptors (_DynamicField, _SourceTable)
-        """
-        fields_enum = make_enum("Fields", *fields)
-        tables_enum = make_enum("Tables", *tables)
-        # generate dynamic versions of each SQLStep subclass
-        dynamic_steps = [
-            step_model._build_step_model(fields_enum=fields_enum, tables_enum=tables_enum)
-            for step_model in step_types
-        ]
-        # build Union typing
-        StepUnion = Union[tuple(dynamic_steps)]  # type: ignore[misc]
+    def _from_dict(self, plan_dict: dict):
+        plan_ = AnalysisPlan.model_validate(plan_dict)
+        self.planning_queue = plan_.steps
 
-        # override only the 'steps' field
-        return create_model(
-            cls.__name__.removeprefix('_'),
-            __base__=cls,
-            steps=(list[StepUnion], ...)
+    async def plan(self, goal: str):
+        plan_system_message = Template(
+            (TEMPATE_PATH / "plan.j2").read_text(), 
+            trim_blocks=True, 
+            lstrip_blocks=True
+        ).render(
+            tables=self.tables,
+            schema_json=json.dumps([
+                t.model_json_schema()
+                for t in STEP_TYPES.values()
+            ],
+            indent=2
         )
-    
+        )
+        # Query for the plan
+        res: ParsedResponse[AnalysisPlan] = await self.client.responses.parse(
+            input=[
+                {'role': 'developer', 'content': plan_system_message},
+                {'role': 'user', 'content': goal}
+            ],
+            text_format=AnalysisPlan,
+            model="o4-mini",
+            reasoning={
+                "effort":"high"
+            }
+        )
+        self.planning_queue = res.output_parsed.steps
+        self.current_plan = {
+            "name": res.output_parsed.name,
+            "display_name": res.output_parsed.display_name,
+            "plan": res.output_parsed.plan
+        }
 
-    @property
-    def output_tables(self) -> list[_SourceTable]:
-        """
-        List of all the tables that are / will be created when executing analysis
-        """
-        return [
-            step.output_table
-            for step in self.steps
-            if issubclass(step.__class__, _SQLStep)
-        ]
-    
-    @property
-    def sql_steps(self) -> list[_SQLStep]:
-        """
-        List of all Sql steps
-        """
-        return [
-            step
-            for step in self.steps
-            if issubclass(step.__class__, _SQLStep)
-        ]
-    
-    @property
-    def reporting_steps(self) -> list[_ReportingStep]:
-        """
-        List of all Reporting steps
-        """
-        return [
-            step
-            for step in self.steps
-            if issubclass(step.__class__, _ReportingStep)
-        ]
 
-    @model_validator(mode="after")
-    def _fill_in_source_tables(self):
-        """
-        Validator updates *any* field in *any* step that is a source table to:
-            - If it has an `output_table_idx` value -> Fill in source_table and source_schema
-                where source_schema is the name of the analysis
-            - If it does not have a `output_table_idx` -> Fill in the source_schema as the
-                default defined in `geo_assistant.config`
-        """
-        # While filling in sources, keep track of any tables that should avoid being immediately
-        #   dropped. These are any tables that are used as a source in a `_ReportingStep`
-        for step in self.steps:
-            for field, info in step.__class__.model_fields.items():
-                ann = info.annotation
-                if isinstance(ann, type) and issubclass(ann, _SourceTable):
-                    value: _SourceTable = getattr(step, field)
-                    if value.output_table_idx is not None:
-                        new_value = _SourceTable(
-                            source_table=self.output_tables[value.output_table_idx],
-                            source_schema=self.name,
-                            output_table_idx=None
-                        )
-                        # If the table is also included in a ReportingStep, then it is considered
-                        #   'final' and should not be dropped on analysis completion
-                        if issubclass(step.__class__, _ReportingStep):
-                            self.final_tables.append(str(new_value))
-                    else:
-                        new_value = _SourceTable(
-                            source_table=value.source_table.value,
-                            source_schema=Configuration.db_base_schema,
-                            output_table_idx=None
-                        )
-                    setattr(step, field, new_value)
-        return self
+    async def walkthrough(self):
+            # Pop the next step from the queue
+        while self.planning_queue:
+            step = self.planning_queue.pop(0)
 
-    async def execute(self, id_: str, engine: Engine, emitter: Callable = None, query: str = None) -> GISReport:
+            # Generate the system message using the step
+            step_system_message = Template(
+                (TEMPATE_PATH / "plan.j2").read_text(), 
+                trim_blocks=True, 
+                lstrip_blocks=True
+            ).render(
+                step_json=step.model_dump_json(indent=2),
+                tables=self.tables,
+                gen_steps=self.generated_steps
+            )
+
+            # Resolve the enums for generating the sql params
+            columns = [
+                table.columns
+                for table in self.tables
+            ]
+            columns = sum(columns, [])
+            tables = [table.name for table in self.tables]
+            # Add any enum values from a table it is dependent on, allowing it to use it
+            #   when generating the next step
+            for i in step.dependent_on:
+                completion = self.generated_steps[i]
+                columns.extend(completion.columns)
+                tables.append(completion.table_)
+
+            # Create the model with these enum values
+            StepModel = STEP_TYPES[step.type]._build_step_model(
+                columns_enum=make_enum("ColumnsEnum", *columns),
+                tables_enum=make_enum("TablesEnum", *tables)
+            )
+
+            # Hit openai
+            res: ParsedResponse[StepModel] = await self.client.responses.parse(
+                input=[
+                    {'role': 'developer', 'content': step_system_message},
+                    {'role': 'user', 'content': step.method}
+                ],
+                text_format=StepModel,
+                model="o4-mini",
+                reasoning={
+                    "effort":"high"
+                }
+            )
+            # Mark the table name and add it to completed
+            sql_params = res.output_parsed
+            sql_params.table_ = step.name
+            sql_params.to_destroy_ = step.intermediate
+            self.generated_steps.append(sql_params)
+
+            yield step
+
+
+
+    async def execute(self, engine: Engine):
         """
         Executes the pregenerated plan. This will populate a new schema in the database, filled
             with any tables that this particular analysis used. It returns a strucutred "GISReport"
@@ -179,32 +195,22 @@ class _GISAnalysis(BaseModel):
         with engine.begin() as conn:
             sql = text(
                 (
-                    f"CREATE SCHEMA IF NOT EXISTS {self.name} AUTHORIZATION {Configuration.db_tileserv_role};"
-                    f"GRANT USAGE ON SCHEMA {self.name} TO {Configuration.db_tileserv_role};"
+                    f"CREATE SCHEMA IF NOT EXISTS {self.plan['name']} AUTHORIZATION {Configuration.db_tileserv_role};"
+                    f"GRANT USAGE ON SCHEMA {self.plan['name']} TO {Configuration.db_tileserv_role};"
                 )
             )
             conn.execute(sql)
 
-        items = []
+        while self.generated_steps:
+            step = self.generated_steps.pop(0)
         # Run each step, saving result to the 'items' array
-        for i, step in enumerate(self.steps):
-            logger.info(f"Running {step.name}: {step.reasoning}")
-            if emitter:
-                await emitter(
-                    {
-                        "type": "analysis",
-                        "query": query,
-                        "step": step.reasoning,
-                        "id": id_,
-                        "status": "processing",
-                        "progress": float(i+1)/len(self.steps)
-                    }
-                )
-
-            if isinstance(step, _SQLStep):
+            logger.info(f"Executing {step.name}")
+            if issubclass(step, _SQLStep):
                 try:
-                    items.append(step._execute(engine, self.name))
-                    self.tables_created.append(f"{self.name}.{step.output_table}")
+                    item = step._execute(engine, self.name)
+                    if step.to_destroy_:
+                        self.to_destroy_.append(item)
+                    yield item
                 except Exception as e:
                     raise AnalysisSQLStepFailed(
                         analysis_name=self.name,
@@ -213,9 +219,16 @@ class _GISAnalysis(BaseModel):
                     )
             # TODO: If any more reporting steps get added, new logic will need to be implemented
             #   here
-            elif isinstance(step, _PlotlyMapLayerStep):
-                items.append(step.export())
-            
-        return GISReport(
-            items=items
-        )
+            elif issubclass(step, _ReportingStep):
+                yield step.export()
+        
+
+    async def cleanup(self, engine: Engine):
+        with engine.begin():
+            for table in self.to_destroy_:
+                execute_template_sql(
+                    engine=engine,
+                    template_name="drop",
+                    schema_name=self.plan['name'],
+                    table_name=table.table
+                )

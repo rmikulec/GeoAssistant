@@ -1,4 +1,4 @@
-from geo_assistant.agent.analysis._analysis import _GISAnalysis
+from geo_assistant.agent.analysis._analysis import GISAnalyst
 from geo_assistant.agent.analysis._steps import (
     _AggregateStep,
     _BufferStep,
@@ -6,16 +6,16 @@ from geo_assistant.agent.analysis._steps import (
     _MergeStep,
     _PlotlyMapLayerStep,
     _SaveTable,
-    DEFAULT_STEP_TYPES
+    STEP_TYPES
 )
 
 __all__ = [
-    "_GISAnalysis",
+    "GISAnalyst",
     "_AggregateStep",
     "_BufferStep",
     "_FilterStep",
     "_MergeStep",
     "_PlotlyMapLayerStep",
     "_SaveTable",
-    "DEFAULT_STEP_TYPES"
+    "STEP_TYPES"
 ]

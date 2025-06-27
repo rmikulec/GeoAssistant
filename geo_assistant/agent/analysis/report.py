@@ -12,7 +12,8 @@ class TableCreated(BaseModel):
     """
     name: str
     reason: str
-    table_created: str
+    table: str
+    columns: list[str]
 
 
 class PlotlyMapLayerArguements(BaseModel):

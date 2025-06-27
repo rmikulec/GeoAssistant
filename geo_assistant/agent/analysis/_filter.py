@@ -10,6 +10,8 @@ from typing import Union, List
 from typing_extensions import Literal
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from geo_assistant.agent.analysis._select import _Column
+
 # literal of all operators
 Operator = Literal[
     '=', '!=', '>', '<', '>=', '<=', 
@@ -20,7 +22,7 @@ Operator = Literal[
 ]
 
 
-class _FilterItem(BaseModel, ABC):
+class _WhereColumn(_Column):
     """
     Base Filter class, requiring an `operator` for each subclass, and providing an `alias`
         field for each subclass
@@ -33,51 +35,40 @@ class _FilterItem(BaseModel, ABC):
     # enable discriminated union on `operator`
     model_config = ConfigDict(discriminator='operator')
 
-    @classmethod
-    def _build_filter(cls, fields_enum):
-        """
-        Private method to inject Fields Enum into a `column` model field
-        """
-        return create_model(
-            cls.__name__.removeprefix('_'),
-            __base__=cls,
-            column=(fields_enum, ...)
-        )
-
 """
 Filter classes each for a different type of WHERE operation. To add more, extend the base
     class and add to the list at the bottom
 """
 
 
-class _ValueFilter(_FilterItem):
+class _ValueWhere(_WhereColumn):
     operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE']
     value: Union[str, int, float] = Field(
         ..., description="Single value for comparisons"
     )
 
 
-class _ListFilter(_FilterItem):
+class _ListWhere(_WhereColumn):
     operator: Literal['IN', 'NOT IN']
     value_list: List[Union[str, int, float]] = Field(
         ..., description="List of values for IN / NOT IN"
     )
 
 
-class _BetweenFilter(_FilterItem):
+class _BetweenWhere(_WhereColumn):
     operator: Literal['BETWEEN']
     lower: Union[str, int, float]
     upper: Union[str, int, float]
 
 
-class _NullFilter(_FilterItem):
+class _NullWhere(_WhereColumn):
     operator: Literal['IS NULL', 'IS NOT NULL']
 
 
 # List of allowed filter types
-SQLFilters: list[type[_FilterItem]] = [
-    _ValueFilter,
-    _ListFilter,
-    _BetweenFilter,
-    _NullFilter,
+SQLFilters: list[type[_WhereColumn]] = [
+    _ValueWhere,
+    _ListWhere,
+    _BetweenWhere,
+    _NullWhere,
 ]
