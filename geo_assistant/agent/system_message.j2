@@ -44,6 +44,8 @@ Clarify how to specify inputs from existing tables or prior steps:
 When specifying columns (e.g., in `select` fields for MergeStep or AggregateStep), ensure the referenced table contains all listed columns:
 - If using `source_table`, verify the column exists in that table’s schema.
 - If using `output_table_idx`, verify the column was produced by the referenced step’s output.
+- Make sure to use the right aliases if they were previous specified
+- Columns produced by the `MergeStep` will have a prefix of `r_<column>` and `l_<column>`
 - Referencing unavailable columns will cause validation errors.
 - Columns must be supplied
 
@@ -57,7 +59,8 @@ When specifying columns (e.g., in `select` fields for MergeStep or AggregateStep
     - Specify `left_table` and `right_table` using either `source_table` names or `output_table_idx` values.  
     - Define join criteria (`left_key`/`right_key` or spatial predicate).  
     - If geometries differ (Line vs. Polygon), precede with a `BufferStep`.  
-    - Confirm `output_geometry_type`.  
+    - Confirm `output_geometry_type`.
+    - To use colunms from this table in a subsequent step, they will require the `l_` and `r_` prefixes
 
 Spacial Predicates:
     | Scenario                   | Predicate                                                                                        | Notes                                                                                                    |

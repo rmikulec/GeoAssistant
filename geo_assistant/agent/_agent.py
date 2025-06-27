@@ -24,30 +24,51 @@ from geo_assistant.agent.analysis.report import TableCreated, PlotlyMapLayerArgu
 logger = get_logger(__name__)
 
 GEO_AGENT_SYSTEM_MESSAGE = """
-You are a geo-assistant who is an expert at making maps in GIS software. You will be given access
-to a large dataset of GeoJSON data, and you are tasked to keep the map in a state that best reflects
-the conversation with the user.
+You are **Geo-Assistant**, an expert GIS analyst and spatial database architect.  
+Your job is to keep the map up-to-date to reflect the user's requests by choosing between simple layer operations and deeper PostGIS analysis.
 
-To do so, you will be given access to the following tools:
-  - add_map_layer: You can add a new layer to the map, with the filters and color of your choosing
-  - remove_map_layer: You can remove a layer when it is no longer applicable to the conversation
-  - reset_map: You can reset the map to have 0 layers and start over
+---
 
-Here is the current status of the map:
-{map_status}
+## Available Data & Context  
+- **GeoJSON dataset**: large, schema-defined tables of spatial features  
+- **Current map status** (layers & styles):  
+  {map_status}  
+- **Table schemas**:  
+  {tables}
+- **Additional context**:  
+  {context}  
 
-Here is any other relevant information:
-{context}
+---
 
-Here are the tables that are available:
-{tables}
+## Tools  
+- **analyze**  
+  - Plan out a more sophisticated analysis, using a series of PostGIS queries, saving/viewing data, as well as updating the map from multiple sources 
+  - Use when the request spans multiple tables, requires spatial joins, aggregations, or geometry computations  
+- **add_map_layer**  
+  - Add a new layer from a single table with filters & styling  
+- **remove_map_layer**  
+  - Remove an existing layer  
+- **reset_map**  
+  - Clear all layers and start over
 
-When the user makes a request:
-1. Look at the fields available
-2. See what tables the fields are associated with
-3. Analyze if the request requires data across tables
-    a. If yes, then request an analysis
-    b. If no, then add map layers
+---
+
+## Workflow  
+1. **Interpret** the user's request and identify required data sources.  
+2. **Decide** if the request requires cross-table or advanced spatial analysis:  
+   1. If **yes**, write a concise plan (“I will run SQL to …”), then invoke **analyze**.  
+   2. If **no**, write a brief plan (“I will add a layer for …”), then invoke **add_map_layer**.  
+3. After each tool call, **describe** in one sentence how the map changed.  
+4. **Maintain** a minimal map: remove or reset layers if they no longer serve the user's goal.
+
+---
+
+## Rules & Constraints  
+- **Always** favor the **analyze** tool for complex tasks (joins, buffers, spatial aggregates).  
+- Use **add_map_layer** only for single-table styling or filtering.  
+- Before using **reset_map**, confirm no combination of other tools can satisfy the request.  
+- Provide **inline comments** or a one-sentence rationale before each tool invocation to show your reasoning.  
+- Ensure every response follows the JSON action schema below.
 """
 
 
@@ -178,6 +199,27 @@ class GeoAgent(BaseAgent):
         await self._emit_figure(self.map_handler.update_figure().to_plotly_json())
         count = self.data_handler.filter_count(self.engine, table, filters)
         return f"Layer {layer_id} add with {count} rows"
+
+    @tool(
+        name="_get_table_info",
+        description="Select tables to get more information about them",
+        params={
+            "tables":   {
+                "type":"array", 
+                "description": "Request info from multiple tables at once",
+                "items": {"type": "string", "enum": lambda self: list(self.registry.tables.keys())}
+            }
+        }
+    )
+    def _get_table_info(self, tables: list[str]) -> str:
+        table_models = []
+
+        for table_full in tables:
+            schema, table = table_full.split('.')
+            table_models.append(self.registry[('schema', schema), ('table', table)][0].model_dump())
+
+        return json.dumps(table_models, indent=2)
+
 
     @tool(
         name="remove_map_layer",
