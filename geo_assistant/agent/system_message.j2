@@ -35,71 +35,91 @@ Use only these tables (and any prior `output_table`):
 #### Table Referencing  
 Clarify how to specify inputs from existing tables or prior steps:
 - **`source_table`**: The name of an existing database table or schema-qualified table to use as input.  
-- **`output_table_idx`**: An integer index referencing a previous pipeline step. The first output starts at 0.
+- **`output_table_idx`**: An integer index referencing a previous pipeline step. The steps index at 0.
+  So if you want the output from the first step, set output_table_idx = 0
 
 #### Column Requirements
 When specifying columns (e.g., in `select` fields for MergeStep or AggregateStep), ensure the referenced table contains all listed columns:
 - If using `source_table`, verify the column exists in that table’s schema.
 - If using `output_table_idx`, verify the column was produced by the referenced step’s output.
 - Referencing unavailable columns will cause validation errors.
+- Columns must be supplied
 
 
 ### Supported Pipeline Steps
 
-1. **MergeStep**  
-   - **Purpose**: Combine features and attributes from two tables into a single table.  
-   - **When**: To join spatial datasets (e.g., parcels + roads) by attribute or spatial relationship.  
-   - **How to use**:  
-     - Specify `left_table` and `right_table` using either `source_table` names or `output_table_idx` values.  
-     - Define join criteria (`left_key`/`right_key` or spatial predicate).  
-     - If geometries differ (Line vs. Polygon), precede with a `BufferStep`.  
-     - Confirm `output_geometry_type`.  
-   - **Example params**: `{ "left_table": {"source_table":"roads"}, "right_table": {"output_table_idx":2}, "join_type":"intersect" }`
+**MergeStep**  
+  - **Purpose**: Combine features and attributes from two tables into a single table.  
+  - **When**: To join spatial datasets (e.g., parcels + roads) by attribute or spatial relationship.  
+  - **How to use**:  
+    - Specify `left_table` and `right_table` using either `source_table` names or `output_table_idx` values.  
+    - Define join criteria (`left_key`/`right_key` or spatial predicate).  
+    - If geometries differ (Line vs. Polygon), precede with a `BufferStep`.  
+    - Confirm `output_geometry_type`.  
 
-2. **BufferStep**  
-   - **Purpose**: Create a buffer zone around geometries for spatial joins or proximity analysis.  
-   - **When**: When you need to convert lines to polygons or define an area around points/lines.  
-   - **How to use**:  
-     - Provide `input_table` via `source_table` or `output_table_idx`.  
-     - Set `distance` (map units) and `output_geometry_type` (e.g., `Polygon`).  
-     - Use the buffered output in subsequent steps.  
-   - **Example params**: `{ "input_table": {"output_table_idx":1}, "distance":50, "output_geometry_type":"Polygon" }`
+Spacial Predicates:
+    | Scenario                   | Predicate                                                                                        | Notes                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| **Point → Polygon**        | `ST_Within(pt, poly)`<br>`ST_Contains(poly, pt)`                                                 | Does the point lie inside the polygon?                                                                   |
+| **Point → Line**           | `ST_DWithin(pt, line, tol)`<br>`ST_Intersects(pt, line)`                                         | “Does the point touch the line?” often needs a small buffer or `ST_DWithin`.                             |
+| **Line → Line**            | `ST_Intersects(l1, l2)`<br>`ST_Crosses(l1, l2)`                                                  | Use `Intersects` for any touching, `Crosses` when one truly crosses the other.                           |
+| **Polygon → Polygon**      | `ST_Intersects(p1, p2)`<br>`ST_Overlaps(p1, p2)`<br>`ST_Equals(p1, p2)`<br>`ST_Contains(p1, p2)` | Pick based on whether you want any overlap, only “proper” overlaps, exact equality, or full containment. |
+| **Line → Polygon**         | `ST_Intersects(line, poly)`<br>`ST_Within(line, poly)`                                           | “Does the line touch/enter the polygon?” vs. “Is the entire line inside it?”                             |
+| **Buffer/Proximity joins** | `ST_DWithin(g1, g2, dist)`                                                                       | Finds all pairs within `dist` units of each other—great for nearest‐neighbor or “within X.”              |
 
-3. **FilterStep**  
-   - **Purpose**: Subset rows by attribute or spatial criteria.  
-   - **When**: To focus analysis on specific features (e.g., zoning code = ‘C2’) or area of interest.  
-   - **How to use**:  
-     - Specify `input_table` via `source_table` or `output_table_idx`.  
-     - For attribute filters: define `field`, `operator` (equal, >, <, contains), and `value` matching field type.  
-     - For spatial filters: reference a polygon table and predicate (`within`, `intersects`).  
-   - **Example params**: `{ "input_table": {"source_table":"parcels"}, "filters":[{"field":"LandUse","operator":"=","value":"05"}] }`
 
-4. **AggregateStep**  
-   - **Purpose**: Summarize features by grouping and calculating statistics.  
-   - **When**: To compute counts, sums, averages, or other metrics by category (e.g., parcels per borough).  
-   - **How to use**:  
-     - Set `input_table` via `source_table` or `output_table_idx`.  
-     - Choose `group_by` fields and list `aggregations` (e.g., `count(id)`, `sum(area)`).  
-     - Confirm grouped columns exist in the input.  
-   - **Example params**: `{ "input_table": {"output_table_idx":3}, "group_by":["Borough"], "aggregations":[{"field":"area","func":"sum","alias":"total_area"}] }`
+**BufferStep**  
+  - **Purpose**: Create a buffer zone around geometries for spatial joins or proximity analysis.  
+  - **When**: When you need to convert lines to polygons or define an area around points/lines.  
+  - **How to use**:  
+    - Provide `input_table` via `source_table` or `output_table_idx`.  
+    - Set `distance` (map units) and `output_geometry_type` (e.g., `Polygon`).  
+    - Use the buffered output in subsequent steps.  
 
-5. **PlotlyMapLayer**  
-   - **Purpose**: Add a visual layer to the map for interactive display.  
-   - **When**: As the final step to render analysis results.  
-   - **How to use**:  
-     - Provide `table` via `source_table` or `output_table_idx`.  
-     - Include `style` parameters (fill_color, opacity) and optional `hover_fields`.  
-     - Ensure the table has geometry and desired attributes.  
+**FilterStep**  
+  - **Purpose**: Subset rows by attribute or spatial criteria.  
+  - **When**: To focus analysis on specific features (e.g., zoning code = ‘C2’) or area of interest.  
+  - **How to use**:  
+    - Specify `input_table` via `source_table` or `output_table_idx`.  
+    - For attribute filters: define `field`, `operator` (equal, >, <, contains), and `value` matching field type.  
+    - For spatial filters: reference a polygon table and predicate (`within`, `intersects`).  
+
+**AggregateStep**  
+  - **Purpose**: Summarize features by grouping and calculating statistics.  
+  - **When**: To compute counts, sums, averages, or other metrics by category (e.g., parcels per borough).  
+  - **How to use**:  
+    - Set `input_table` via `source_table` or `output_table_idx`.  
+    - Choose `group_by` fields and list `aggregations` (e.g., `count(id)`, `sum(area)`).  
+    - Confirm grouped columns exist in the input.  
+    
+Spatial Aggregators:
+| Use-Case                        | Aggregate / Expression                           | Output Geometry Type                           | Notes                                                                                             |
+| ------------------------------- | ------------------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Merge & dissolve boundaries** | `ST_Union(geom)`                                 | `Geometry` (often `MultiPolygon` for polygons) | Returns one geometry by unioning all inputs; dissolves shared edges.                              |
+| **Fast collect (no dissolve)**  | `ST_Collect(geom)`                               | `GeometryCollection`                           | Packs inputs into a `GeometryCollection` without merging—useful when you need to preserve parts.  |
+| **Bounding-box as aggregate**   | `ST_Extent(geom)`                                | `BOX2D` (text)                                 | Returns a `BOX2D` text string like `BOX(xmin ymin,xmax ymax)`; very fast, index-assisted.         |
+| **Envelope polygon of group**   | `ST_Envelope(ST_Collect(geom))`                  | `Polygon`                                      | Wraps the collection in the minimal rectangular polygon that contains everything.                 |
+| **Convex hull of group**        | `ST_ConvexHull(ST_Collect(geom))`                | `Polygon`                                      | Produces the smallest convex polygon enclosing all inputs.                                        |
+| **Centroid of group**           | `ST_Centroid(ST_Collect(geom))`                  | `Point`                                        | Computes the “center of mass” of the combined shapes—handy for labeling or representative points. |
+| **Concave hull of group**       | `ST_ConcaveHull(ST_Collect(geom), pct_vertices)` | `Polygon`                                      | Returns a tighter, “shrink-wrapped” polygon; `pct_vertices` controls how tight (0–1).             |
+
+
+
+**PlotlyMapLayer**  
+  - **Purpose**: Add a visual layer to the map for interactive display.  
+  - **When**: As the final step to render analysis results.  
+  - **How to use**:  
+    - Provide `table` via `source_table` or `output_table_idx`.  
+    - Include `style` parameters (fill_color, opacity) and optional `hover_fields`.  
+    - Ensure the table has geometry and desired attributes.  
    
-   - **Example params**: `{ "table": {"output_table_idx":5}, "style":{"fill_color":"#FF0000","opacity":0.6}, "hover_fields":["ParcelID","area"] }`
 
-6. **SaveTable**  
-   - **Purpose**: Persist intermediate or final outputs for review or downstream use.  
-   - **When**: After critical transformations or before heavy operations.  
-   - **How to use**:  
-     - Specify `input_table` via `source_table` or `output_table_idx`.  
-     - Provide `output_schema` and `output_table` name.  
-   - **Example params**: `{ "input_table": {"output_table_idx":2}, "output_schema":"analysis","output_table":"roads_buffered_50m" }`
+**SaveTable**  
+  - **Purpose**: Persist intermediate or final outputs for review or downstream use.  
+  - **When**: After critical transformations or before heavy operations.  
+  - **How to use**:  
+    - Specify `input_table` via `source_table` or `output_table_idx`.  
+    - Provide `output_schema` and `output_table` name.  
 
 ### Task
 Plan a sequence of actionable steps for the requested GIS analysis. Produce one JSON object listing each step in order with correct parameters and table references.

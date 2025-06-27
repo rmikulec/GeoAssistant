@@ -46,7 +46,7 @@ Aggregator classes each for a different type of GROUP BY operation. To add more,
 
 
 class _CountAggregator(_Aggregator):
-    operator: Literal['COUNT']
+    operator: Literal['COUNT'] = "COUNT"
     column:   Union[str, Literal['*']]   = Field(
         '*',
         description="Column to count (or '*' for all rows)"
@@ -58,22 +58,22 @@ class _CountAggregator(_Aggregator):
 
 
 class _SumAggregator(_Aggregator):
-    operator: Literal['SUM']
+    operator: Literal['SUM'] = "SUM"
     column:   str                   = Field(..., description="Column to sum")
 
 
 class _AvgAggregator(_Aggregator):
-    operator: Literal['AVG']
+    operator: Literal['AVG'] = "AVG"
     column:   str                   = Field(..., description="Column to average")
 
 
 class _MinAggregator(_Aggregator):
-    operator: Literal['MIN']
+    operator: Literal['MIN'] = "MIN"
     column:   str                   = Field(..., description="Column to take minimum of")
 
 
 class _MaxAggregator(_Aggregator):
-    operator: Literal['MAX']
+    operator: Literal['MAX'] = "MAX"
     column:   str                   = Field(..., description="Column to take maximum of")
 
 

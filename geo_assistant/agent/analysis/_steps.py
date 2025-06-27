@@ -16,7 +16,7 @@ import uuid
 from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Type, Self, Literal, Optional, Union
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 from sqlalchemy import Engine, text
 
@@ -195,7 +195,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
             return choose_typmod(geom_types)
 
 
-    def _execute(self, engine: Engine, schema: str) -> TableCreated:
+    def _execute(self, engine: Engine, schema: str, gtype: str = None) -> TableCreated:
         """
         Private method to execute the sql steps query on the PostGIS database.
 
@@ -203,8 +203,9 @@ class _SQLStep(_GISAnalysisStep, ABC):
         Views instead
         """
 
-        # Get the geometry type for the new table
-        geometry_type = self._get_geometry_type(engine)
+        if not gtype:
+            # Get the geometry type for the new table
+            gtype = self._get_geometry_type(engine)
 
         # Build out the args, excluding ones that are not needed
         exclude_args = ['_type', '_is_intermediate']
@@ -214,7 +215,7 @@ class _SQLStep(_GISAnalysisStep, ABC):
             template_name=self.step_type,
             geometry_column=Configuration.geometry_column,
             srid=3857,
-            gtype=geometry_type,
+            gtype=gtype,
             schema=schema,
             **other_args
         )
@@ -288,6 +289,7 @@ class _FilterStep(_SQLStep):
 
         return super()._execute(engine, schema)
 
+
 class _MergeStep(_SQLStep):
     """
     SQL Step to run a basic `JOIN` clause
@@ -300,7 +302,6 @@ class _MergeStep(_SQLStep):
     spatial_predicate: Literal['intersects','contains','within','dwithin'] = Field(
         ..., description="ST_<predicate> or DWithin"
     )
-    output_geometry_type: GeometryType = Field(description="The geometry type after the spatial join. Choose carefull based on left, right table types as well as the spatial predicate")
     distance: Optional[float] = Field(
         None,
         description="Buffer distance (only for dwithin)"
@@ -311,14 +312,14 @@ class _MergeStep(_SQLStep):
     )
 
 
+
 class _AggregateStep(_SQLStep):
     """
     SQL Step to run a basic `GROUP BY` clause
     """
     step_type: Literal['aggregate'] = "aggregate"
-    select: list[_Field]
+    select: list[_Aggregator]
     source_table: _SourceTable
-    aggregators: list[_Aggregator] = Field(..., description="List of ways to aggregate columns")
     spatial_aggregator: Optional[Literal[
     'COLLECT',      # ST_Collect
     'UNION',        # ST_Union
@@ -345,7 +346,7 @@ class _AggregateStep(_SQLStep):
         return create_model(
             cls.__name__.removeprefix('_'),
             __base__=cls,
-            aggregators=(agg_union, Field(..., description="List of ways to aggregate columns")),
+            select=(agg_union, Field(..., description="List of ways to aggregate columns")),
         )
 
 
