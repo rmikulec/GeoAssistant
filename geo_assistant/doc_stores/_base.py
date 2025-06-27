@@ -76,7 +76,7 @@ class DocumentStore(ABC):
             text_key(str):   The key in each dict whose value is the text to embed.
         """
         # Extract IDs and texts
-        ids   = [int(doc[index_key]) for doc in documents]
+        ids   = [doc[index_key] for doc in documents]
         texts = [doc[text_key]       for doc in documents]
 
         # Batch‐embed all texts in one call

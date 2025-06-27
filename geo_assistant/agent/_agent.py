@@ -41,6 +41,13 @@ Here is any other relevant information:
 
 Here are the tables that are available:
 {tables}
+
+When the user makes a request:
+1. Look at the fields available
+2. See what tables the fields are associated with
+3. Analyze if the request requires data across tables
+    a. If yes, then request an analysis
+    b. If no, then add map layers
 """
 
 
@@ -196,11 +203,15 @@ class GeoAgent(BaseAgent):
 
     @tool(
         name="run_analysis",
-        description="Perform GIS Analysis, using differnt queries",
-        params={"query":{"type":"string", "description": "Description of what analysis should be done"}},
-        required=["query"],
+        description=(
+            "Perform an Analysis by querying a PostGIS Database and outputing data"
+            "You will have access to SQL Queries, such as Filter, Aggregate, Merge, Buffer"
+            "You will have the options to add the results to the map and/or export them"
+        ),
+        params={"goal":{"type":"string", "description": "Describe the goal of this analysis"}},
+        required=["goal"],
     )
-    async def run_analysis(self, query: str):
+    async def run_analysis(self, goal: str):
             """
             Runs an analysis given a user message. This is a more time consuming process than 'chat',
             as it forces the agent to *think* and plan steps, then executes sql to create tables for
@@ -209,12 +220,12 @@ class GeoAgent(BaseAgent):
             Args:
                 - query(str): Text descibing what the analysis should accomplish
             """
-            analysis_id = str(abs(hash(query)))
+            analysis_id = str(abs(hash(goal)))
             if self.emitter:
                 await self.emitter(
                     AnalysisUpdate(
                         id=analysis_id,
-                        query=query,
+                        query=goal,
                         step="Generating analysis plan...",
                         status=Status.GENERATING,
                         progress=1
@@ -222,11 +233,11 @@ class GeoAgent(BaseAgent):
                 )
 
                 
-            logger.info(f"Running analysis for query: {query}")
+            logger.info(f"Running analysis for query: {goal}")
             # Setup the system message template
             system_message_template = Template(source=pathlib.Path("./geo_assistant/agent/system_message.j2").read_text())
             # Query for relevant fields
-            field_defs = await self.field_store.query(query, k=15)
+            field_defs = await self.field_store.query(goal, k=15)
             field_defs = self.registry.verify_fields(field_defs)
             field_names = [field['name'] for field in field_defs]
             # Query registry for all tables that make up the set of fields
@@ -239,7 +250,7 @@ class GeoAgent(BaseAgent):
                 tables=[table.name for table in tables]
             )
             # Query for relative info
-            context = await self.info_store.query(query, k=10)
+            context = await self.info_store.query(goal, k=10)
             # Generate the system message
             system_message = system_message_template.render(
                 field_definitions=field_defs,
@@ -253,7 +264,7 @@ class GeoAgent(BaseAgent):
                 res: ParsedResponse[_GISAnalysis] = await self.client.responses.parse(
                     input=[
                         {'role': 'system', 'content': system_message},
-                        {'role': 'user', 'content': query}
+                        {'role': 'user', 'content': goal}
                     ],
                     model="o4-mini",
                     reasoning={
@@ -269,7 +280,7 @@ class GeoAgent(BaseAgent):
                         AnalysisUpdate(
                             id=analysis_id,
                             step="Analysis plan failed to generate.",
-                            query=query,
+                            query=goal,
                             status=Status.ERROR,
                             progress=1.0
                         )
@@ -291,7 +302,7 @@ class GeoAgent(BaseAgent):
                     id_=analysis_id, 
                     engine=self.engine, 
                     emitter=_step_emitter,
-                    query=query
+                    query=goal
                 )
                 # Perform any actions required based on the report
                 for item in report.items:
@@ -324,7 +335,7 @@ class GeoAgent(BaseAgent):
                     await self.emitter(
                         AnalysisUpdate(
                             id=analysis_id,
-                            query=query,
+                            query=goal,
                             step="Analysis failed to run.",
                             status=Status.ERROR,
                             progress=1.0
@@ -345,7 +356,7 @@ class GeoAgent(BaseAgent):
                 await self.emitter(
                     AnalysisUpdate(
                         id=analysis_id,
-                        query=query,
+                        query=goal,
                         step="Complete",
                         status=Status.SUCCEDED,
                         progress=1.0

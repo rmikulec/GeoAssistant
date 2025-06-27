@@ -1,12 +1,16 @@
 import pathlib
+import json
 import asyncio
 from typing import Union, List, Any, Dict, Literal
 from pydantic import BaseModel, Field
 
 from PyPDF2 import PdfReader, PageObject
 
+from geo_assistant.logging import get_logger
 from geo_assistant.config import Configuration
 from geo_assistant.doc_stores._base import DocumentStore
+
+logger = get_logger(__name__)
 
 PARSE_SYSTEM_MESSAGE = """
 You are an AI assistant specialized in extracting structured information from a data dictionary PDF. You will be given the complete, page-by-page text of a data dictionary (tables and entries may be split across pages). Your job is to:
@@ -65,6 +69,7 @@ class DataDictionary(BaseModel):
     field_defintions: list[FieldDefinition]
 
 
+
 class FieldDefinitionStore(DocumentStore):
     _name = "field_definitions"
     _parse_prompt   = PARSE_SYSTEM_MESSAGE
@@ -96,12 +101,9 @@ class FieldDefinitionStore(DocumentStore):
         else:
             pages= reader.pages
 
-        page_batches = [
-            pages[i : i + batch_size]
-            for i in range(0, len(pages), window_size)
-        ]
+        logger.info(f"{len(reader.pages)} pages founds")
 
-        async def _parse_data(page_batch: list[PageObject]):
+        async def _parse_data(page_batch: list[PageObject]) -> DataDictionary:
             # Ask OpenAI to format into markdown
             resp = await self._client.responses.parse(
                 instructions=self._parse_prompt,
@@ -111,21 +113,29 @@ class FieldDefinitionStore(DocumentStore):
             )
             return resp.output_parsed
 
-        results = await asyncio.gather(*[_parse_data(page_batch) for page_batch in page_batches])
-        field_definitions = [result.field_defintions for result in results]
-        field_definitions = sum(field_definitions, [])
-
+        if len(reader.pages) <= batch_size:
+            field_definitions = (await _parse_data(reader.pages)).field_defintions
+        else:
+            page_batches = [
+                pages[i : i + batch_size]
+                for i in range(0, len(pages), window_size)
+            ]
+            results = await asyncio.gather(*[_parse_data(page_batch) for page_batch in page_batches])
+            field_definitions = [result.field_defintions for result in results]
+            field_definitions = sum(field_definitions, [])
 
         # Turn each FieldDefinition into a document with id/text/metadata
         docs: List[Dict[str, Any]] = []
         for idx, fld in enumerate(field_definitions):
-            id_ = len(self.documents) + idx
+            print(fld)
+            id_ = hash(table+str(pdf_path.name)+str(idx))
             docs.append({
                 "id":   id_,
                 "text": f"{fld.name_pretty}: {fld.description}",
                 "table": self.table,
+                "source": str(pdf_path.name),
                 **fld.model_dump()  # all other metadata
             })
-
+        json.dump(docs, open("./docs.json", "w"))
         # Batch-add all our field-definition docs
         await self.add(docs, index_key="id", text_key="text")

@@ -33,7 +33,7 @@ def execute_template_sql(
     """
     # 1) Load template
     template: Template = Template(
-        source=(TEMPATE_PATH / (template_name + ".sql")).read_text()
+        source=(TEMPATE_PATH / (template_name + ".sql")).read_text(), trim_blocks=True, lstrip_blocks=True
     )
     # 2) Render SQL
     sql: str = template.render(*args, **kwargs).strip()
