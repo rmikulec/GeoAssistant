@@ -1,6 +1,8 @@
 {# templates/aggregate_step.sql.j2 #}
 DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
+-- Leaving in the CTEs for now as may want to add where clauses
+
 CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
 WITH src AS (
   SELECT
@@ -10,7 +12,6 @@ WITH src AS (
     {% for agg in select if agg.column.value != '*' %}
       "{{ agg.column.value }}",
     {% endfor %}
-    ST_Transform("{{ geometry_column }}", {{ srid }})::Geometry({{ gtype }}, {{ srid }}) AS "geom{{ srid }}"
   FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 )
 

@@ -2,23 +2,17 @@
 DROP TABLE IF EXISTS "{{ schema }}"."{{ output_table }}";
 
 CREATE TABLE "{{ schema }}"."{{ output_table }}" AS
-WITH src AS (
-  SELECT
-    {% if select|length == 0 %}
-      *,
-    {% else %}
-    {%- for col in select %}
-      "{{ col.value }}",
-    {%- endfor %}
-    {% endif %}
-    ST_Transform(
-      "{{ geometry_column }}",
-      {{ srid }}
-    )::Geometry({{ gtype }}, {{ srid }}) AS "geom{{srid}}"
-  FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
-)
-SELECT *
-FROM src
+
+SELECT
+  {% if select|length == 0 %}
+    *,
+  {% else %}
+  {%- for col in select %}
+    "{{ col.value }}",
+  {%- endfor %}
+  {% endif %}
+  "{{ geometry_column }}",
+FROM "{{ source_table.source_schema }}"."{{ source_table.source_table }}"
 {%- if filters %}
 WHERE
   {%- for f in filters %}
