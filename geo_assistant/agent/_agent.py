@@ -216,7 +216,7 @@ class GeoAgent(BaseAgent):
             Args:
                 - query(str): Text descibing what the analysis should accomplish
             """
-            emitted_text = f"### {goal}"
+            emitted_text = f"*{goal}*"
             analysis_id = str(abs(hash(goal)))
             if self.emitter:
                 await self.emitter(
@@ -285,7 +285,7 @@ class GeoAgent(BaseAgent):
                                 progress=complete_count/total_steps
                             )
                         )
-            except:
+            except Exception as e:
                 # Implement proper error handling
                 if self.emitter:
                     await self.emitter(
@@ -296,7 +296,8 @@ class GeoAgent(BaseAgent):
                             step=step_plan.method,
                             progress=complete_count/total_steps
                         )
-                    )                
+                    )  
+                raise e              
 
 
             try:
@@ -342,7 +343,7 @@ class GeoAgent(BaseAgent):
                         logger.warning(
                             f"Report item type {type(item)} handler not implemented"
                         )
-            except:
+            except Exception as e:
                 if self.emitter:
                     emitted_text+=step_plan.reason
                     await self.emitter(
@@ -354,6 +355,7 @@ class GeoAgent(BaseAgent):
                             progress=complete_count/total_steps
                         )
                     )
+                    raise e
             finally:
                 analyst.cleanup(self.engine)
 
@@ -372,5 +374,4 @@ class GeoAgent(BaseAgent):
             return (
                 f"GIS Analysis ran succussfully."
                 f"Report description:"
-                f"{report.model_dump_json(indent=2)}"
             )
