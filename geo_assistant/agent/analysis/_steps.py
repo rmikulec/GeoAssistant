@@ -48,6 +48,21 @@ GeometryType = Literal[
 ]
 
 
+class _SelectColumn(BaseModel):
+    name: str
+    left_or_right: Literal['neither', 'left', 'right']
+
+    @classmethod
+    def _build_model(cls, fields_enum: type[Enum]):
+        """
+        Private method called on model production to inject tables enum
+        """
+        return create_model(
+            cls.__name__.removeprefix('_'),
+            __base__=cls,
+            name=(fields_enum, Field(description="The name of the source table to pull data from"))
+        )
+
 class _SourceTable(BaseModel):
     """
     Source Table type that is used to restrict OpenAI from using one of two different types of
@@ -118,6 +133,12 @@ class _GISAnalysisStep(BaseModel, ABC):
             field_name: field_info.annotation._build_model(tables_enum)
             for field_name, field_info in cls.model_fields.items()
             if field_info.annotation == _SourceTable
+        }
+        # Find all _SelectColumn markers and run their _build_model private method
+        table_fields = {
+            field_name: field_info.annotation._build_model(fields_enum)
+            for field_name, field_info in cls.model_fields.items()
+            if field_info.annotation == _SelectColumn
         }
         
         # Create the new model, extending itself but replacing all marked fields with the newly
