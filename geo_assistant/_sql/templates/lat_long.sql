@@ -6,11 +6,9 @@ WHERE (
   ( ST_Dimension(t.geometry) = 1
     AND ST_DWithin(
           t.geometry::geography,
-          ST_SetSRID(
             ST_MakePoint({{ lon }}, {{ lat }}),
-            4326
           )::geography,
-          {{ tolerance_meters }}
+        {{ tolerance_meters }}
     )
   )
   OR

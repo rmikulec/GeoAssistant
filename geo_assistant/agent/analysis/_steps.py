@@ -299,6 +299,15 @@ class _MergeStep(_SQLStep):
     right_select: list[_Field]
     left_table: _SourceTable
     right_table: _SourceTable
+    spatial_aggregator: Optional[Literal[
+        'COLLECT',      # ST_Collect
+        'UNION',        # ST_Union
+        'CENTROID',     # ST_Centroid
+        'EXTENT',       # ST_Extent
+        'ENVELOPE',     # ST_Envelope
+        'CONVEXHULL',   # ST_ConvexHull
+        'CONCAVEHULL'
+    ]] = Field(default=None, description="List of ways to aggregate geometries on merge")
     spatial_predicate: Literal['intersects','contains','within','dwithin'] = Field(
         ..., description="ST_<predicate> or DWithin"
     )
@@ -321,13 +330,14 @@ class _AggregateStep(_SQLStep):
     select: list[_Aggregator]
     source_table: _SourceTable
     spatial_aggregator: Optional[Literal[
-    'COLLECT',      # ST_Collect
-    'UNION',        # ST_Union
-    'CENTROID',     # ST_Centroid
-    'EXTENT',       # ST_Extent
-    'ENVELOPE',     # ST_Envelope
-    'CONVEXHULL'    # ST_ConvexHull
-]] = Field(default=None, description="List of ways to aggregate geometries")
+        'COLLECT',      # ST_Collect
+        'UNION',        # ST_Union
+        'CENTROID',     # ST_Centroid
+        'EXTENT',       # ST_Extent
+        'ENVELOPE',     # ST_Envelope
+        'CONVEXHULL',    # ST_ConvexHull
+        'CONCAVEHULL'
+    ]] = Field(default=None, description="List of ways to aggregate geometries")
     group_by: list[_Field] = Field(..., description="List of columns to GROUP BY")
     output_table: str = Field(..., description="Name of the aggregated table")
 

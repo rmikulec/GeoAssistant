@@ -37,6 +37,8 @@ Clarify how to specify inputs from existing tables or prior steps:
 - **`source_table`**: The name of an existing database table or schema-qualified table to use as input.  
 - **`output_table_idx`**: An integer index referencing a previous pipeline step. The steps index at 0.
   So if you want the output from the first step, set output_table_idx = 0
+  You should *always* set this value to less than the number of tables: output_table_idx < len(steps)
+  You should **NEVER** set this value to be greater than or equal to the number of steps
 
 #### Column Requirements
 When specifying columns (e.g., in `select` fields for MergeStep or AggregateStep), ensure the referenced table contains all listed columns:
